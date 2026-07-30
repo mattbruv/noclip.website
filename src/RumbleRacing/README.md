@@ -57,15 +57,13 @@ from the final build (`SFX_RenderPowerup` at `0x135B70`, `powerUp_Init` at `0x18
 `powerUp_Simulate` at `0x1812A0`, `SFX_InitPowerup` at `0x135D20`), where every glow
 definition also sets a byte at `+0x26` that the debug build leaves alone.
 
+Hover height comes from `TrkInfo_GetTerrainInfoFunc` at init time, so like the other actors
+it is scraped from a memory dump rather than reverse engineered — see
+[tools/actorTransforms.ts](tools/actorTransforms.ts) above.
+
 The one thing not read out of the machine code is the order `mat44flt_EulerAngles`
 composes its three rotations in — that is inside the VU0 macro ops, and the renderer
 assumes Y, then X, then Z.
-- Hover height comes from `TrkInfo_GetTerrainInfoFunc` at init time, so like the other
-  actors it is scraped from a memory dump rather than reverse engineered:
-  [tools/powerupTransforms.ts](tools/powerupTransforms.ts) matches each pickup's X/Z
-  against PCSX2's `eeMemory.bin` and merges the resulting positions into the per-track
-  JSON. Re-run it after regenerating that JSON with `searchY.py`, which skips actors
-  without a model resource and therefore skips every power-up.
 
 `Glow.ts` implements the shared glow system (`ColGlow_CreateRing` /
 `ColGlow_CreateStarSmooth` shapes, and the `_$GlowStart` microprogram's billboard
@@ -97,12 +95,45 @@ skip a polygon outright when it is set. Around 71-100% of each track's polygons 
 drivable by that test, and the flag field carries plenty more bits (surface material,
 presumably) that are not decoded yet.
 
-The Collision panel has a toggle per layer, all off by default. They draw as X-ray
-overlays rather than depth-tested geometry, because the collision mesh sits just under the
-track surface it was built from and testing against the visible geometry hides nearly all
-of it.
+The Collision panel has a toggle per layer, all off by default.
+
+The collision mesh is coplanar with the visible track — sampled against the rendered track
+triangles along the racing line, the two agree to within about a world unit, median zero —
+so drawing it needs a way past the resulting z-fight. The debug layers are depth-tested
+like everything else and nudged 60 scene units towards the camera in the vertex shader,
+which clears the surface underneath while staying far too small to punch through terrain or
+buildings. Hills, trees and walls occlude them properly.
+
+## Paths (the `Cnet` resources)
+
+Every track carries a handful of `Cnet` resources, parsed by [asset/cnet.ts](asset/cnet.ts).
+`Network_DownloadData` registers the network at resource `+0xC`, where a `u16` id is
+followed by an `s16` point count and then the points, 0x20 bytes each:
+
+| Offset | Contents |
+| ------ | -------- |
+| `+0x04` | position; a Y of 0 is resolved against the terrain at load, like actors |
+| `+0x10` | radius — how wide the path is at this point |
+| `+0x14` | two `s16` connection slots, -1 when empty |
+| `+0x18` | flags (16 distinct values on a racing line, 1 elsewhere) |
+| `+0x1a` | speed hint, in steps of five; only the racing line uses it |
+
+`Network_FindValidConnectingPoint` walks both connection slots, so these are graphs, not
+polylines — which is exactly what makes the racing line interesting: the second slot is
+where the AI's alternate lanes and shortcuts live (41 of SE1's 425 points have one).
+
+The resource name is the only thing that says what a network is *for*, since several kinds
+share an id: `NET.TXT` is the line the AI cars drive, `MAP` is the outline the track map is
+drawn from, and the rest are named after whatever follows them — `DUSTER`, `CHOPPER`,
+`TRAINS`, `FISH`, `HAWK`, `GULL`, `JETSKI`, `UFO`, `PTERASAUR`, `TWISTER`, `RATS`,
+`DOCKCRANES`. The Paths panel has a toggle per network, off by default, drawn as edges plus
+nodes in a colour per path.
+
+What is *not* done yet is moving anything along them. That needs the actor-to-network
+binding (`Network_InitNetActor`, and whichever `Cact` field names the network) plus the
+traversal in `moveNetworkObject` / `Network_ComputeDataForNextTarget` to get speeds right.
 
 ## Future Improvements / Cool Ideas
 - Render the Sun/Moon/stars
 - Place instanced "lights" (the star effect/texture on light poles)
-- Would be cool to animate networked actor and move them along their spline paths (Cropduster/Helicopters/Planes/Tornado)
+- Move the networked actors along their `Cnet` paths (Cropduster/Helicopters/Planes/Tornado) — the paths are parsed and drawn now, but nothing travels them

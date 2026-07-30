@@ -55,6 +55,7 @@ import { DrawBatch, MergedGeometry, O3DGeometry } from "./Geometry";
 import { TrackProgram } from "./TrackProgram";
 import { GlowDef, GlowRenderer, GlowShape, glowColorFromRGBA32 } from "./Glow";
 import { CollisionRenderer } from "./Collision";
+import { NetworkLayer, NetworkRenderer } from "./Networks";
 import { isDrivable } from "./asset/gmd";
 import { assertExists } from "../util";
 
@@ -124,6 +125,8 @@ class RumbleRacingScene implements SceneGfx {
   private actorMatrices = new Map<number, mat4>();
   private glowRenderer: GlowRenderer;
   private collisionRenderer: CollisionRenderer | null = null;
+  private networkRenderer: NetworkRenderer | null = null;
+  private visibleNetworks = new Set<NetworkLayer>();
   private powerUps: PowerUp[] = [];
   // Model-space offset of the pickup's bounding-sphere center, which is what the
   // glow primitives are centered on rather than the actor's origin.
@@ -164,6 +167,13 @@ class RumbleRacingScene implements SceneGfx {
       this.collisionRenderer = new CollisionRenderer(
         cache,
         this.trackFile.collision,
+        GLOBAL_SCALE,
+      );
+
+    if (this.trackFile.networks.length > 0)
+      this.networkRenderer = new NetworkRenderer(
+        cache,
+        this.trackFile.networks,
         GLOBAL_SCALE,
       );
 
@@ -474,6 +484,22 @@ class RumbleRacingScene implements SceneGfx {
       this.renderPowerUpGlows(viewerInput);
 
     this.renderCollision(viewerInput);
+    this.renderNetworks(viewerInput);
+  }
+
+  private renderNetworks(viewerInput: ViewerRenderInput): void {
+    const renderer = this.networkRenderer;
+    if (renderer === null) return;
+
+    for (const layer of renderer.layers) {
+      if (!this.visibleNetworks.has(layer)) continue;
+      renderer.submit(
+        this.renderHelper.renderInstManager,
+        this.blendedRenderInstList,
+        viewerInput,
+        layer,
+      );
+    }
   }
 
   // Debug layers go last so they read on top of the track they describe.
@@ -741,6 +767,29 @@ class RumbleRacingScene implements SceneGfx {
       );
     }
 
+    const pathsPanel = new UI.Panel();
+    pathsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+    pathsPanel.setTitle(UI.LAYER_ICON, "Paths (Networks)");
+
+    if (this.networkRenderer === null) {
+      const missing = document.createElement("div");
+      missing.style.padding = "4px 12px";
+      missing.textContent = "No networks in this track.";
+      pathsPanel.contents.appendChild(missing);
+    } else {
+      for (const layer of this.networkRenderer.layers) {
+        const checkbox = new UI.Checkbox(
+          `${layer.name} (${layer.pointCount})`,
+          false,
+        );
+        checkbox.onchanged = () => {
+          if (checkbox.checked) this.visibleNetworks.add(layer);
+          else this.visibleNetworks.delete(layer);
+        };
+        pathsPanel.contents.appendChild(checkbox.elem);
+      }
+    }
+
     const renderSettingsPanel = new UI.Panel();
     renderSettingsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
     renderSettingsPanel.setTitle(UI.RENDER_HACKS_ICON, "Render Settings");
@@ -771,13 +820,19 @@ class RumbleRacingScene implements SceneGfx {
       renderSettingsPanel.contents.appendChild(wireframe.elem);
     }
 
-    return [trackGeometryPanel, collisionPanel, renderSettingsPanel];
+    return [
+      trackGeometryPanel,
+      collisionPanel,
+      pathsPanel,
+      renderSettingsPanel,
+    ];
   }
 
   public destroy(device: GfxDevice): void {
     this.renderHelper.destroy();
     this.glowRenderer.destroy(device);
     this.collisionRenderer?.destroy(device);
+    this.networkRenderer?.destroy(device);
 
     for (const group of this.trackGroups) group.geometry.destroy(device);
 

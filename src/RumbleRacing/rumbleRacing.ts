@@ -8,6 +8,7 @@ import { ObfNode } from "./asset/o3d/obf";
 import { BlendMode } from "./asset/o3d/geometry";
 import { getTextures } from "./asset/txf/TXF";
 import { parseTrackCollision, TrackCollision } from "./asset/gmd";
+import { Network, parseNetwork } from "./asset/cnet";
 import { vec2, vec3 } from "gl-matrix";
 import { Color, White } from "../Color";
 
@@ -97,12 +98,23 @@ export interface TextureData {
   height: number;
 }
 
+// A `Cnet` path, with the resource name kept because it is the only thing that
+// says what a network is for: NET.TXT is the line the AI cars drive, MAP is the
+// outline the track map is drawn from, and the rest are named after the actor
+// that follows them (DUSTER, CHOPPER, TRAINS, ...).
+export interface NetworkData {
+  name: string;
+  network: Network;
+  isRacingLine: boolean;
+}
+
 export interface RumbleRacingTrackFile {
   obfs: ObfData[];
   o3ds: O3DData[];
   actors: ActorData[];
   textures: TextureData[];
   collision: TrackCollision | null;
+  networks: NetworkData[];
 }
 
 function buildObfNode(node: ObfNode): ObfJsonNode {
@@ -189,6 +201,7 @@ export function processTrackFile(
     actors: [],
     textures: [],
     collision: null,
+    networks: [],
   };
 
   const track = parseTrackFile(rawData, "track");
@@ -202,7 +215,8 @@ export function processTrackFile(
       res.typeTag !== "obf " &&
       res.typeTag !== "o3d " &&
       res.typeTag !== "o3da" &&
-      res.typeTag !== "gmd "
+      res.typeTag !== "gmd " &&
+      res.typeTag !== "Cnet"
     ) {
       continue;
     }
@@ -285,6 +299,16 @@ export function processTrackFile(
         // The track's `gmd ` resource holds the collision mesh cars drive on.
         if (res.typeTag === "gmd " && out.collision === null)
           out.collision = parseTrackCollision(resource.rawData());
+
+        if (res.typeTag === "Cnet") {
+          const network = parseNetwork(resource.rawData());
+          if (network !== null)
+            out.networks.push({
+              name: res.resourceName.replace(/[^A-Za-z0-9_.]/g, ""),
+              network,
+              isRacingLine: res.resourceName.includes("NET.TXT"),
+            });
+        }
         break;
       }
       default: {
