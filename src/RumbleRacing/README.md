@@ -10,6 +10,26 @@ Because there was too much logic to reverse engineer to place actors correctly, 
 I took a save state using PCSX2 at the exact moment after loading the level and scraped out the final actor Y levels and transformations using [this script](https://github.com/mattbruv/rumble-racing-re/blob/main/scripts/searchY.py).
 This pre-processed JSON data should be served alongside the game's data in the DATA folder for actors to be placed properly.
 
+[tools/actorTransforms.ts](tools/actorTransforms.ts) does the same job from inside this
+repo and fills in what `searchY.py` could not. It runs three passes over each dump:
+power-ups (which `searchY.py` skips, since it bails on actors with no
+`O3DResourceIndex`), then an exact float-bit match on X/Z for anything still unplaced,
+then a tolerant match (within 0.01) restricted to candidates that sit inside a live actor
+struct — a code pointer at `actor+0xAC` — which is what recovers the glass barricades,
+whose coordinates the game rewrites slightly. It never overwrites an existing entry, so it
+is safe to re-run over JSON that `searchY.py` produced, and where both methods resolve the
+same actor they agreed on all 669 cases tested.
+
+That leaves 51 actors across the 15 tracks with no runtime transform at all, because the
+capture simply does not contain them: one easter egg per track, the stopwatch pickups on
+the three Daytona tracks, and The Gauntlet's car wrecks. They are not scrape failures —
+nothing spawns them in a savestate taken at the start line. The scene falls back to the
+position the track file authored for those, which is usually deliberate (the wrecks carry
+authored Y values), but leaves their basis unknown, so they render axis-aligned. The
+authored rotation is not in the `Cact` chunk in any form I could find — neither a yaw
+angle nor a stored basis survives a search against actors whose runtime rotation is
+known — so it is computed at init from something else.
+
 ## Power-Ups
 
 The on-track pickups are `Cact` actors of type 8, which the track file leaves without an

@@ -268,7 +268,7 @@ class RumbleRacingScene implements SceneGfx {
 
     if (missingTransforms > 0)
       console.warn(
-        `RumbleRacing: no transform data for ${missingTransforms} power-up(s); run tools/powerupTransforms.ts to regenerate it`,
+        `RumbleRacing: no transform data for ${missingTransforms} power-up(s); run tools/actorTransforms.ts to regenerate it`,
       );
   }
 
@@ -743,7 +743,15 @@ function buildActorMatrix(actor: ActorData, globalScale: number): mat4 {
     return m;
   }
 
-  // Fallback if no transform exists
+  // Actors the game does not spawn at load — easter eggs, the stopwatch pickups,
+  // The Gauntlet's car wrecks — have no runtime transform to scrape, so fall back
+  // to the position the track file authored. That leaves the basis unknown, but
+  // it beats stacking them all on the world origin.
+  mat4.fromTranslation(m, [
+    actor.x * globalScale,
+    actor.y * globalScale,
+    actor.z * globalScale,
+  ]);
   mat4.scale(m, m, [globalScale, globalScale, globalScale]);
   return m;
 }
