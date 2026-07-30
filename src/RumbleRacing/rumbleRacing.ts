@@ -43,7 +43,30 @@ export interface O3DData {
   resourceIndex: number;
   isAnimated: boolean;
   obfs: ObfData[];
+  boundingSphere: BoundingSphere | null;
 }
+
+export interface BoundingSphere {
+  center: vec3;
+  radius: number;
+}
+
+// Actor types, as spelled out by the actor names in the resource list.
+export const enum ActorType {
+  PowerUp = 8,
+}
+
+// Power-up actors leave their O3DResourceIndex unset; powerUp_Init hard-codes
+// both of these resources out of GLBLDATA.TRK instead — the spinning inner
+// pickup, and the translucent shell that tumbles around it.
+export const POWERUP_MODEL_RESOURCE_INDEX = 5011; // PS2:OBJECTS:PU_INNER.O3D
+export const POWERUP_SHELL_RESOURCE_INDEX = 5012; // PS2:OBJECTS:PU_OUTER.O3D
+
+// Resources pulled out of GLBLDATA.TRK even though they are not named GLOBAL.
+export const GLOBAL_EXTRA_RESOURCE_INDICES = new Set([
+  POWERUP_MODEL_RESOURCE_INDEX,
+  POWERUP_SHELL_RESOURCE_INDEX,
+]);
 
 type MatrixRow = [x: number, y: number, z: number, w: number];
 export type ActorTransforms = Record<number, ActorMatrix>;
@@ -58,6 +81,7 @@ export type ActorMatrix = [
 export interface ActorData {
   name: string;
   resourceIndex: number;
+  actorType: number;
   x: number;
   y: number;
   z: number;
@@ -179,7 +203,12 @@ export function processTrackFile(
       continue;
     }
 
-    if (isGlobalFile && !res.resourceName.includes("GLOBAL")) continue;
+    if (
+      isGlobalFile &&
+      !res.resourceName.includes("GLOBAL") &&
+      !GLOBAL_EXTRA_RESOURCE_INDICES.has(res.resourceIndex)
+    )
+      continue;
 
     let resource: ParsedAsset;
     try {
@@ -191,14 +220,20 @@ export function processTrackFile(
 
     switch (resource.kind) {
       case "Actor": {
-        if (resource.o3dResourceIndex > 0) {
+        // Power-ups have no O3DResourceIndex of their own, but they do get
+        // drawn (with a model the code picks), so keep them around too.
+        const isPowerUp = resource.actorType === ActorType.PowerUp;
+        if (resource.o3dResourceIndex > 0 || isPowerUp) {
           out.actors.push({
             name: res.resourceName,
             resourceIndex: res.resourceIndex,
+            actorType: resource.actorType,
             x: resource.x,
             y: resource.y,
             z: resource.z,
-            o3dResourceIndex: resource.o3dResourceIndex,
+            o3dResourceIndex: isPowerUp
+              ? POWERUP_MODEL_RESOURCE_INDEX
+              : resource.o3dResourceIndex,
             transform: undefined,
           });
         }
@@ -216,11 +251,16 @@ export function processTrackFile(
           name: `obf_${idx}`,
           rootNode: buildObfNode(obf.rootNode),
         }));
+        const bounds = resource.gmds[0]?.bounds ?? null;
         out.o3ds.push({
           name: res.resourceName,
           resourceIndex: res.resourceIndex,
           isAnimated: resource.isAnimated,
           obfs,
+          boundingSphere:
+            bounds !== null
+              ? { center: bounds.sphereCenter, radius: bounds.sphereRadius }
+              : null,
         });
         break;
       }

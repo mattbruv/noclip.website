@@ -1,12 +1,16 @@
 import {
   ActorData,
   ActorTransforms,
+  ActorType,
   ExcludeInfo,
+  GLOBAL_EXTRA_RESOURCE_INDICES,
   ObfData,
+  POWERUP_MODEL_RESOURCE_INDEX,
+  POWERUP_SHELL_RESOURCE_INDEX,
   processTrackFile,
   RumbleRacingTrackFile,
 } from "./rumbleRacing";
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import {
   makeBackbufferDescSimple,
@@ -49,16 +53,50 @@ import * as UI from "../ui";
 import { FakeTextureHolder } from "../TextureHolder";
 import { DrawBatch, MergedGeometry, O3DGeometry } from "./Geometry";
 import { TrackProgram } from "./TrackProgram";
+import { GlowDef, GlowRenderer, GlowShape, glowColorFromRGBA32 } from "./Glow";
 
 const pathBase = `RumbleRacing`;
 const GLOBAL_SCALE = 300.0; // this feels the best
 const SOLID_PASS_ALPHA_REF = 0.99;
+
+// powerUp_Simulate spins the inner pickup a quarter turn per second about the
+// vertical axis, overwriting whatever terrain-aligned basis it was spawned with.
+const POWERUP_SPIN_RATE = Math.PI / 2.0;
+
+// The shell gets three separately accumulating angles instead, which
+// mat44flt_EulerAngles turns into a rotation about Y, X and Z respectively. The
+// order the three are composed in is the one part of this not read out of the
+// VU0 macro ops, and at 839 deg/sec on the last axis it does not read.
+const POWERUP_SHELL_RATE_Y = 1.2566371; // 72 deg/sec
+const POWERUP_SHELL_RATE_X = 1.8849558; // 108 deg/sec
+const POWERUP_SHELL_RATE_Z = 14.639822; // 839 deg/sec
+
+// SFX_InitPowerup sizes the glow off whichever of the two models is larger,
+// falling back to the inner one when the shell is absent.
+const POWERUP_GLOW_RADIUS_SCALE = 0.9;
+
+// The three glow definitions SFX_RenderPowerup appends every frame: two rings
+// that fade out towards the middle and the rim, plus a star flare.
+const POWERUP_GLOW_CLEAR = glowColorFromRGBA32(0x00000000);
+const POWERUP_GLOW_RING = glowColorFromRGBA32(0xa8a8ff60);
+const POWERUP_GLOW_STAR = glowColorFromRGBA32(0xb8b8ff80);
 
 interface TrackGeometryGroup {
   geometry: MergedGeometry;
   visible: boolean;
   label: string;
 }
+
+interface PowerUp {
+  // Position and scale only: the spin is applied at render time.
+  baseMatrix: mat4;
+  glowCenter: vec3;
+  glowRadius: number;
+  glowDefs: GlowDef[];
+}
+
+const scratchMatrix = mat4.create();
+const scratchShellMatrix = mat4.create();
 
 class RumbleRacingScene implements SceneGfx {
   private renderHelper: GfxRenderHelper;
@@ -70,12 +108,19 @@ class RumbleRacingScene implements SceneGfx {
   private linearSampler: GfxSampler;
   private textureMap = new Map<number, GfxTexture>();
   private showActors: boolean = true;
+  private showPowerUps: boolean = true;
+  private showPowerUpGlow: boolean = true;
   private wireframe: boolean = false;
   private showVertexColors: boolean = true;
   private showTextures: boolean = true;
 
   public textureHolder = new FakeTextureHolder([]);
   private actorMatrices = new Map<number, mat4>();
+  private glowRenderer: GlowRenderer;
+  private powerUps: PowerUp[] = [];
+  // Model-space offset of the pickup's bounding-sphere center, which is what the
+  // glow primitives are centered on rather than the actor's origin.
+  private powerUpGlowOffset = vec3.create();
 
   constructor(
     private sceneContext: SceneContext,
@@ -104,6 +149,9 @@ class RumbleRacingScene implements SceneGfx {
         new O3DGeometry(cache, o3d, this.exclude),
       );
     }
+
+    this.glowRenderer = new GlowRenderer(cache);
+    this.buildPowerUps();
 
     this.linearSampler = cache.createSampler({
       minFilter: GfxTexFilterMode.Bilinear,
@@ -140,6 +188,88 @@ class RumbleRacingScene implements SceneGfx {
       visible: true,
       label: "Track Panorama",
     });
+  }
+
+  // Power-up pickups are drawn in three layers: the spinning PU_INNER model, the
+  // PU_OUTER shell tumbling around it, and the glow primitives
+  // SFX_RenderPowerup hands to the ColGlow billboard system.
+  private buildPowerUps(): void {
+    const findModel = (resourceIndex: number) =>
+      this.trackFile.o3ds.find((o3d) => o3d.resourceIndex === resourceIndex);
+    const model = findModel(POWERUP_MODEL_RESOURCE_INDEX);
+    const shell = findModel(POWERUP_SHELL_RESOURCE_INDEX);
+
+    const innerSphere = model?.boundingSphere ?? null;
+    const shellSphere = shell?.boundingSphere ?? null;
+
+    // The glow hangs off the inner model's bounding sphere, but it is sized from
+    // whichever model is larger.
+    if (innerSphere !== null)
+      vec3.copy(this.powerUpGlowOffset, innerSphere.center);
+
+    const innerRadius = innerSphere?.radius ?? 0.0;
+    const radius =
+      (shellSphere !== null
+        ? POWERUP_GLOW_RADIUS_SCALE * Math.max(innerRadius, shellSphere.radius)
+        : innerRadius) * GLOBAL_SCALE;
+
+    let missingTransforms = 0;
+
+    for (const actor of this.trackFile.actors) {
+      if (actor.actorType !== ActorType.PowerUp) continue;
+
+      // Pickups hover above the terrain, and the height only exists at runtime,
+      // so it has to come out of the pre-processed transform data.
+      if (actor.transform === undefined) {
+        missingTransforms++;
+        continue;
+      }
+
+      const baseMatrix = this.actorMatrices.get(actor.resourceIndex)!;
+      const glowCenter = vec3.create();
+
+      const glowDefs: GlowDef[] = [
+        {
+          center: glowCenter,
+          colorA: POWERUP_GLOW_CLEAR,
+          colorB: POWERUP_GLOW_RING,
+          radiusA: 0.0,
+          radiusB: radius,
+          angle: 0.0,
+          shape: GlowShape.Ring24,
+        },
+        {
+          center: glowCenter,
+          colorA: POWERUP_GLOW_CLEAR,
+          colorB: POWERUP_GLOW_RING,
+          radiusA: 1.1 * radius,
+          radiusB: radius,
+          angle: 0.0,
+          shape: GlowShape.Ring24,
+        },
+        {
+          center: glowCenter,
+          colorA: POWERUP_GLOW_CLEAR,
+          colorB: POWERUP_GLOW_STAR,
+          radiusA: 3.0 * radius,
+          radiusB: 0.0,
+          angle: Math.PI / 2.0,
+          shape: GlowShape.Star1,
+        },
+      ];
+
+      this.powerUps.push({
+        baseMatrix,
+        glowCenter,
+        glowRadius: radius,
+        glowDefs,
+      });
+    }
+
+    if (missingTransforms > 0)
+      console.warn(
+        `RumbleRacing: no transform data for ${missingTransforms} power-up(s); run tools/powerupTransforms.ts to regenerate it`,
+      );
   }
 
   private resolveBatchTextures(): void {
@@ -292,7 +422,7 @@ class RumbleRacingScene implements SceneGfx {
     }
   }
 
-  private renderMap(): void {
+  private renderMap(viewerInput: ViewerRenderInput): void {
     const template = this.renderHelper.renderInstManager.pushTemplate();
     template.setMegaStateFlags({ cullMode: GfxCullMode.None });
 
@@ -310,6 +440,8 @@ class RumbleRacingScene implements SceneGfx {
 
     if (this.showActors) {
       for (const actor of this.trackFile.actors) {
+        if (actor.actorType === ActorType.PowerUp) continue;
+
         const o3dGeom = this.o3dGeometries.get(actor.o3dResourceIndex);
         if (!o3dGeom) continue;
 
@@ -320,7 +452,85 @@ class RumbleRacingScene implements SceneGfx {
       }
     }
 
+    if (this.showPowerUps) this.renderPowerUpModels(viewerInput);
+
     this.renderHelper.renderInstManager.popTemplate();
+
+    if (this.showPowerUps && this.showPowerUpGlow)
+      this.renderPowerUpGlows(viewerInput);
+  }
+
+  private powerUpMatrix(
+    powerUp: PowerUp,
+    viewerInput: ViewerRenderInput,
+  ): mat4 {
+    const yaw = POWERUP_SPIN_RATE * (viewerInput.time / 1000.0);
+    mat4.rotateY(scratchMatrix, powerUp.baseMatrix, yaw);
+    return scratchMatrix;
+  }
+
+  private powerUpShellMatrix(
+    powerUp: PowerUp,
+    viewerInput: ViewerRenderInput,
+  ): mat4 {
+    const seconds = viewerInput.time / 1000.0;
+    mat4.rotateY(
+      scratchShellMatrix,
+      powerUp.baseMatrix,
+      POWERUP_SHELL_RATE_Y * seconds,
+    );
+    mat4.rotateX(
+      scratchShellMatrix,
+      scratchShellMatrix,
+      POWERUP_SHELL_RATE_X * seconds,
+    );
+    mat4.rotateZ(
+      scratchShellMatrix,
+      scratchShellMatrix,
+      POWERUP_SHELL_RATE_Z * seconds,
+    );
+    return scratchShellMatrix;
+  }
+
+  private renderPowerUpModels(viewerInput: ViewerRenderInput): void {
+    const inner = this.o3dGeometries.get(POWERUP_MODEL_RESOURCE_INDEX)
+      ?.frames[0];
+    const shell = this.o3dGeometries.get(POWERUP_SHELL_RESOURCE_INDEX)
+      ?.frames[0];
+
+    for (const powerUp of this.powerUps) {
+      if (inner !== undefined)
+        this.submitBatches(inner, this.powerUpMatrix(powerUp, viewerInput));
+      if (shell !== undefined)
+        this.submitBatches(
+          shell,
+          this.powerUpShellMatrix(powerUp, viewerInput),
+        );
+    }
+  }
+
+  private renderPowerUpGlows(viewerInput: ViewerRenderInput): void {
+    const renderInstManager = this.renderHelper.renderInstManager;
+    this.glowRenderer.pushTemplate(renderInstManager, viewerInput);
+
+    for (const powerUp of this.powerUps) {
+      if (powerUp.glowRadius <= 0.0) continue;
+
+      vec3.transformMat4(
+        powerUp.glowCenter,
+        this.powerUpGlowOffset,
+        this.powerUpMatrix(powerUp, viewerInput),
+      );
+
+      for (const def of powerUp.glowDefs)
+        this.glowRenderer.submitGlow(
+          renderInstManager,
+          this.blendedRenderInstList,
+          def,
+        );
+    }
+
+    renderInstManager.popTemplate();
   }
 
   private updateAnimations(viewerInput: ViewerRenderInput): void {
@@ -349,7 +559,7 @@ class RumbleRacingScene implements SceneGfx {
 
     this.fillSceneParams(template, viewerInput);
 
-    this.renderMap();
+    this.renderMap(viewerInput);
 
     const builder = this.renderHelper.renderGraph.newGraphBuilder();
 
@@ -425,6 +635,26 @@ class RumbleRacingScene implements SceneGfx {
 
     trackGeometryPanel.contents.appendChild(showActorsCheckbox.elem);
 
+    const showPowerUpsCheckbox = new UI.Checkbox(
+      "Power-Ups",
+      this.showPowerUps,
+    );
+    showPowerUpsCheckbox.onchanged = () => {
+      this.showPowerUps = showPowerUpsCheckbox.checked;
+    };
+
+    trackGeometryPanel.contents.appendChild(showPowerUpsCheckbox.elem);
+
+    const showPowerUpGlowCheckbox = new UI.Checkbox(
+      "Power-Up Glow",
+      this.showPowerUpGlow,
+    );
+    showPowerUpGlowCheckbox.onchanged = () => {
+      this.showPowerUpGlow = showPowerUpGlowCheckbox.checked;
+    };
+
+    trackGeometryPanel.contents.appendChild(showPowerUpGlowCheckbox.elem);
+
     for (const group of this.trackGroups) {
       const checkbox = new UI.Checkbox(group.label, group.visible);
       checkbox.onchanged = () => {
@@ -468,6 +698,7 @@ class RumbleRacingScene implements SceneGfx {
 
   public destroy(device: GfxDevice): void {
     this.renderHelper.destroy();
+    this.glowRenderer.destroy(device);
 
     for (const group of this.trackGroups) group.geometry.destroy(device);
 
@@ -573,6 +804,16 @@ class RumbleRacingSceneDesc implements SceneDesc {
     trackData.textures.push(
       ...shared.globalTrackFile.textures.filter(
         (t) => !existingTexIds.has(t.textureId),
+      ),
+    );
+
+    // The pickup models live in the global file rather than in the track.
+    const existingO3DIds = new Set(trackData.o3ds.map((x) => x.resourceIndex));
+    trackData.o3ds.push(
+      ...shared.globalTrackFile.o3ds.filter(
+        (o3d) =>
+          GLOBAL_EXTRA_RESOURCE_INDICES.has(o3d.resourceIndex) &&
+          !existingO3DIds.has(o3d.resourceIndex),
       ),
     );
 
