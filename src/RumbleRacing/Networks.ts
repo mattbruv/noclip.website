@@ -1,3 +1,4 @@
+import { vec3 } from "gl-matrix";
 import { Color, colorNewFromRGBA } from "../Color";
 import { GfxDevice, GfxPrimitiveTopology } from "../gfx/platform/GfxPlatform";
 import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
@@ -38,6 +39,105 @@ const ACTOR_COLORS: Color[] = [
 // The line is the thing to read at a glance, so the nodes stay smaller than it.
 const NODE_POINT_SIZE = 4.0;
 const PATH_LINE_WIDTH = 5.0;
+
+// A path walked out into travel order, ready to sample. Positions carry the
+// scene scale so they can be used directly as world coordinates.
+export interface NetworkRoute {
+  positions: vec3[];
+  lengths: number[];
+  total: number;
+}
+
+// Network_FindNearestPoint: where an actor joins its path is decided by which
+// point it spawned closest to.
+export function findNearestPoint(
+  network: Network,
+  position: ArrayLike<number>,
+): number {
+  let best = -1;
+  let bestDistance = Infinity;
+  for (let i = 0; i < network.points.length; i++) {
+    const p = network.points[i].position;
+    const distance =
+      (p[0] - position[0]) ** 2 +
+      (p[1] - position[1]) ** 2 +
+      (p[2] - position[2]) ** 2;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = i;
+    }
+  }
+  return best;
+}
+
+// Follows the first valid connection out of each point, exactly as
+// Network_FindValidConnectingPoint picks one, until the path closes or runs out.
+// A closing segment back to wherever the chain rejoins itself keeps the actor
+// moving continuously.
+export function buildRoute(
+  network: Network,
+  startIndex: number,
+  scale: number,
+): NetworkRoute | null {
+  if (startIndex < 0 || startIndex >= network.points.length) return null;
+
+  const chain: number[] = [];
+  const seen = new Map<number, number>();
+  let current = startIndex;
+  while (!seen.has(current)) {
+    seen.set(current, chain.length);
+    chain.push(current);
+    const next = network.points[current].connections.find((c) => c >= 0);
+    if (next === undefined) break;
+    current = next;
+  }
+  if (chain.length < 2) return null;
+
+  // Close the loop at whichever point the chain rejoined, or back to the start.
+  chain.push(chain[seen.get(current) ?? 0]);
+
+  const positions = chain.map((index) => {
+    const p = network.points[index].position;
+    return vec3.fromValues(p[0] * scale, p[1] * scale, p[2] * scale);
+  });
+
+  const lengths: number[] = [];
+  let total = 0;
+  for (let i = 0; i + 1 < positions.length; i++) {
+    const length = vec3.distance(positions[i], positions[i + 1]);
+    lengths.push(length);
+    total += length;
+  }
+
+  return { positions, lengths, total };
+}
+
+export function sampleRoute(
+  route: NetworkRoute,
+  distance: number,
+  outPosition: vec3,
+  outDirection: vec3,
+): void {
+  let remaining = distance % route.total;
+  if (remaining < 0) remaining += route.total;
+
+  let segment = 0;
+  while (
+    segment < route.lengths.length - 1 &&
+    remaining > route.lengths[segment]
+  ) {
+    remaining -= route.lengths[segment];
+    segment++;
+  }
+
+  const from = route.positions[segment];
+  const to = route.positions[segment + 1];
+  const length = route.lengths[segment];
+  vec3.lerp(outPosition, from, to, length > 0.0 ? remaining / length : 0.0);
+  vec3.subtract(outDirection, to, from);
+  if (vec3.length(outDirection) > 0.0)
+    vec3.normalize(outDirection, outDirection);
+}
 
 export interface NetworkLayer {
   name: string;

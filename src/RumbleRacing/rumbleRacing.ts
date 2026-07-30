@@ -88,6 +88,8 @@ export interface ActorData {
   y: number;
   z: number;
   o3dResourceIndex: number;
+  networkResourceIndex: number;
+  speed: number;
   transform: ActorMatrix | undefined;
 }
 
@@ -104,6 +106,7 @@ export interface TextureData {
 // that follows them (DUSTER, CHOPPER, TRAINS, ...).
 export interface NetworkData {
   name: string;
+  resourceIndex: number;
   network: Network;
   isRacingLine: boolean;
 }
@@ -252,6 +255,8 @@ export function processTrackFile(
             o3dResourceIndex: isPowerUp
               ? POWERUP_MODEL_RESOURCE_INDEX
               : resource.o3dResourceIndex,
+            networkResourceIndex: resource.networkResourceIndex,
+            speed: resource.speed,
             transform: undefined,
           });
         }
@@ -305,6 +310,7 @@ export function processTrackFile(
           if (network !== null)
             out.networks.push({
               name: res.resourceName.replace(/[^A-Za-z0-9_.]/g, ""),
+              resourceIndex: res.resourceIndex,
               network,
               isRacingLine: res.resourceName.includes("NET.TXT"),
             });

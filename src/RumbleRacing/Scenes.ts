@@ -55,7 +55,14 @@ import { DrawBatch, MergedGeometry, O3DGeometry } from "./Geometry";
 import { TrackProgram } from "./TrackProgram";
 import { GlowDef, GlowRenderer, GlowShape, glowColorFromRGBA32 } from "./Glow";
 import { CollisionRenderer } from "./Collision";
-import { NetworkLayer, NetworkRenderer } from "./Networks";
+import {
+  buildRoute,
+  findNearestPoint,
+  NetworkLayer,
+  NetworkRenderer,
+  NetworkRoute,
+  sampleRoute,
+} from "./Networks";
 import { isDrivable } from "./asset/gmd";
 import { assertExists } from "../util";
 
@@ -91,6 +98,14 @@ interface TrackGeometryGroup {
   label: string;
 }
 
+// An actor that travels a `Cnet` path.
+interface NetworkActor {
+  actor: ActorData;
+  route: NetworkRoute;
+  // Scene units per second.
+  speed: number;
+}
+
 interface PowerUp {
   // Position and scale only: the spin is applied at render time.
   baseMatrix: mat4;
@@ -99,8 +114,17 @@ interface PowerUp {
   glowDefs: GlowDef[];
 }
 
+// Networked actors carry a speed in the units the game's movement code uses; the
+// integration those units feed into is not fully pinned down, so this converts
+// them to scene units per second. Relative speeds between actors are the data's
+// own — a dock crane at 15 against the crop duster at 200 — but the overall pace
+// is calibrated by eye.
+const NETWORK_SPEED_SCALE = 30.0;
+
 const scratchMatrix = mat4.create();
 const scratchShellMatrix = mat4.create();
+const scratchPosition = vec3.create();
+const scratchDirection = vec3.create();
 
 class RumbleRacingScene implements SceneGfx {
   private renderHelper: GfxRenderHelper;
@@ -127,6 +151,8 @@ class RumbleRacingScene implements SceneGfx {
   private collisionRenderer: CollisionRenderer | null = null;
   private networkRenderer: NetworkRenderer | null = null;
   private visibleNetworks = new Set<NetworkLayer>();
+  private networkActors: NetworkActor[] = [];
+  private animateNetworkActors: boolean = true;
   private powerUps: PowerUp[] = [];
   // Model-space offset of the pickup's bounding-sphere center, which is what the
   // glow primitives are centered on rather than the actor's origin.
@@ -176,6 +202,8 @@ class RumbleRacingScene implements SceneGfx {
         this.trackFile.networks,
         GLOBAL_SCALE,
       );
+
+    this.buildNetworkActors();
 
     this.linearSampler = cache.createSampler({
       minFilter: GfxTexFilterMode.Bilinear,
@@ -294,6 +322,32 @@ class RumbleRacingScene implements SceneGfx {
       console.warn(
         `RumbleRacing: no transform data for ${missingTransforms} power-up(s); run tools/actorTransforms.ts to regenerate it`,
       );
+  }
+
+  // Actors whose resource list names a `Cnet` path travel it: crop dusters,
+  // helicopters, trains, the dock cranes. Network_InitNetActor joins the path at
+  // whichever point the actor spawned nearest to, so that is where each one
+  // starts, which also staggers actors that share a path.
+  private buildNetworkActors(): void {
+    for (const actor of this.trackFile.actors) {
+      if (actor.networkResourceIndex <= 0) continue;
+      if (!Number.isFinite(actor.speed) || actor.speed <= 0.0) continue;
+
+      const data = this.trackFile.networks.find(
+        (n) => n.resourceIndex === actor.networkResourceIndex,
+      );
+      if (data === undefined) continue;
+
+      const start = findNearestPoint(data.network, [actor.x, actor.y, actor.z]);
+      const route = buildRoute(data.network, start, GLOBAL_SCALE);
+      if (route === null) continue;
+
+      this.networkActors.push({
+        actor,
+        route,
+        speed: actor.speed * NETWORK_SPEED_SCALE,
+      });
+    }
   }
 
   private resolveBatchTextures(): void {
@@ -463,8 +517,13 @@ class RumbleRacingScene implements SceneGfx {
     }
 
     if (this.showActors) {
+      const animated = new Set(
+        this.animateNetworkActors ? this.networkActors.map((n) => n.actor) : [],
+      );
+
       for (const actor of this.trackFile.actors) {
         if (actor.actorType === ActorType.PowerUp) continue;
+        if (animated.has(actor)) continue;
 
         const o3dGeom = this.o3dGeometries.get(actor.o3dResourceIndex);
         if (!o3dGeom) continue;
@@ -475,6 +534,9 @@ class RumbleRacingScene implements SceneGfx {
         this.submitBatches(frame, this.actorMatrices.get(actor.resourceIndex)!);
       }
     }
+
+    if (this.showActors && this.animateNetworkActors)
+      this.renderNetworkActors(viewerInput);
 
     if (this.showPowerUps) this.renderPowerUpModels(viewerInput);
 
@@ -521,6 +583,40 @@ class RumbleRacingScene implements SceneGfx {
         viewerInput,
         layer,
       );
+    }
+  }
+
+  private renderNetworkActors(viewerInput: ViewerRenderInput): void {
+    const seconds = viewerInput.time / 1000.0;
+
+    for (const networkActor of this.networkActors) {
+      const o3dGeom = this.o3dGeometries.get(
+        networkActor.actor.o3dResourceIndex,
+      );
+      const frame = o3dGeom?.frames[o3dGeom.animationFrame];
+      if (frame === undefined) continue;
+
+      sampleRoute(
+        networkActor.route,
+        networkActor.speed * seconds,
+        scratchPosition,
+        scratchDirection,
+      );
+
+      // Yaw only: the game's movement code banks and pitches as well, which is
+      // not reproduced here.
+      const yaw = Math.atan2(scratchDirection[0], scratchDirection[2]);
+      mat4.fromYRotation(scratchMatrix, yaw);
+      scratchMatrix[12] = scratchPosition[0];
+      scratchMatrix[13] = scratchPosition[1];
+      scratchMatrix[14] = scratchPosition[2];
+      mat4.scale(scratchMatrix, scratchMatrix, [
+        GLOBAL_SCALE,
+        GLOBAL_SCALE,
+        GLOBAL_SCALE,
+      ]);
+
+      this.submitBatches(frame, scratchMatrix);
     }
   }
 
@@ -777,6 +873,17 @@ class RumbleRacingScene implements SceneGfx {
       missing.textContent = "No networks in this track.";
       pathsPanel.contents.appendChild(missing);
     } else {
+      if (this.networkActors.length > 0) {
+        const animate = new UI.Checkbox(
+          `Move actors along paths (${this.networkActors.length})`,
+          this.animateNetworkActors,
+        );
+        animate.onchanged = () => {
+          this.animateNetworkActors = animate.checked;
+        };
+        pathsPanel.contents.appendChild(animate.elem);
+      }
+
       for (const layer of this.networkRenderer.layers) {
         const checkbox = new UI.Checkbox(
           `${layer.name} (${layer.pointCount})`,

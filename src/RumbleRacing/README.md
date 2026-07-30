@@ -129,11 +129,26 @@ drawn from, and the rest are named after whatever follows them — `DUSTER`, `CH
 `DOCKCRANES`. The Paths panel has a toggle per network, off by default, drawn as edges plus
 nodes in a colour per path.
 
-What is *not* done yet is moving anything along them. That needs the actor-to-network
-binding (`Network_InitNetActor`, and whichever `Cact` field names the network) plus the
-traversal in `moveNetworkObject` / `Network_ComputeDataForNextTarget` to get speeds right.
+Actors travel these paths. An actor's resource list — the `aRSL` chunk — is a run of
+(fourCC, resource index) pairs, and an actor that moves has a `Cnet` entry among them; that
+is the binding `Network_InitNetActor` follows, and it is why a helicopter's body and its
+blades both name the same path. The base speed `Network_InitNetActor` copies into the
+movement state comes from the actor header at `+0x28`, which is how a dock crane (15) ends
+up slower than a crop duster (200).
+
+Each actor joins its path at the point it spawned nearest to, as `Network_FindNearestPoint`
+does, and then follows the first valid connection out of each point, like
+`Network_FindValidConnectingPoint`. Sharing a path therefore staggers actors rather than
+stacking them.
+
+Three things are deliberately not reproduced. The absolute speed scale is calibrated by eye
+(`NETWORK_SPEED_SCALE`), because the units those speed values feed into inside
+`moveNetworkObject` are not pinned down — relative speeds between actors are the data's own.
+The actor faces its direction of travel with yaw only, where the game also banks and
+pitches. And where a path branches, this follows the first connection every lap instead of
+choosing, and closes the route back on itself to keep moving.
 
 ## Future Improvements / Cool Ideas
 - Render the Sun/Moon/stars
 - Place instanced "lights" (the star effect/texture on light poles)
-- Move the networked actors along their `Cnet` paths (Cropduster/Helicopters/Planes/Tornado) — the paths are parsed and drawn now, but nothing travels them
+- Reproduce the real network movement model in `moveNetworkObject` (banking, pitch, branch selection, and the speed units) rather than the constant-speed traversal used now
