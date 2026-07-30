@@ -7,6 +7,7 @@ import {
 import { ObfNode } from "./asset/o3d/obf";
 import { BlendMode } from "./asset/o3d/geometry";
 import { getTextures } from "./asset/txf/TXF";
+import { parseTrackCollision, TrackCollision } from "./asset/gmd";
 import { vec2, vec3 } from "gl-matrix";
 import { Color, White } from "../Color";
 
@@ -101,6 +102,7 @@ export interface RumbleRacingTrackFile {
   o3ds: O3DData[];
   actors: ActorData[];
   textures: TextureData[];
+  collision: TrackCollision | null;
 }
 
 function buildObfNode(node: ObfNode): ObfJsonNode {
@@ -186,6 +188,7 @@ export function processTrackFile(
     o3ds: [],
     actors: [],
     textures: [],
+    collision: null,
   };
 
   const track = parseTrackFile(rawData, "track");
@@ -198,7 +201,8 @@ export function processTrackFile(
       res.typeTag !== "txf2" &&
       res.typeTag !== "obf " &&
       res.typeTag !== "o3d " &&
-      res.typeTag !== "o3da"
+      res.typeTag !== "o3da" &&
+      res.typeTag !== "gmd "
     ) {
       continue;
     }
@@ -275,6 +279,12 @@ export function processTrackFile(
             height: base.height,
           });
         }
+        break;
+      }
+      case "GenericAsset": {
+        // The track's `gmd ` resource holds the collision mesh cars drive on.
+        if (res.typeTag === "gmd " && out.collision === null)
+          out.collision = parseTrackCollision(resource.rawData());
         break;
       }
       default: {

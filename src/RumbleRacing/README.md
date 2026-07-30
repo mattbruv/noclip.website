@@ -72,9 +72,37 @@ assumes Y, then X, then Z.
 expansion), so the other effects built on it — sun flares, light glows, lightning, the
 pickup flash — can reuse it.
 
-## Future Improvements / Cool Ideas
+## Collision (the track `gmd ` resource)
 
-- Add a render toggle for showing driveable polygons and/or collision geometry
+`TrkInfo_ParseTrack` walks the track's `gmd ` resource as a flat list of tagged records,
+each with a 0x10 byte header: `Trck`, `GrLi`, `Ligh`, `SunI`, `Visi`, `Curv`, `GrIn`,
+`GrVx`, `GrPi`, `GrFi`. The three that make up the collision mesh are parsed by
+[asset/gmd.ts](asset/gmd.ts):
+
+| Record | Stride | Contents |
+| ------ | ------ | -------- |
+| `GrVx` | 0x10 | Vertex positions, one qword each |
+| `GrPi` | 0x10 | Polygons: four u16 vertex indices, then surface flags at `+0xe` |
+| `GrFi` | 0x08 | Fences: two u16 vertex indices plus flags |
+
+Every count lives together at the top of `GrIn`, which is also the lookup grid:
+`TrkInfo_GetGridInfo` reads its dimensions from `+0x00`/`+0x02` and its origin from
+`+0x10`, and derives a cell index straight from the world position, so a cell is one world
+unit square.
+
+Polygons are quads, and a triangle just repeats a vertex — `TrkInfo_IsPointOverTrackPoly`
+reads all four indices unconditionally. **Bit 0 of the surface flags is what makes a
+polygon drivable**: both `TrkInfo_GetTerrainInfoFunc` and `TrkInfo_GetFloorElevationFunc`
+skip a polygon outright when it is set. Around 71-100% of each track's polygons are
+drivable by that test, and the flag field carries plenty more bits (surface material,
+presumably) that are not decoded yet.
+
+The Collision panel has a toggle per layer, all off by default. They draw as X-ray
+overlays rather than depth-tested geometry, because the collision mesh sits just under the
+track surface it was built from and testing against the visible geometry hides nearly all
+of it.
+
+## Future Improvements / Cool Ideas
 - Render the Sun/Moon/stars
 - Place instanced "lights" (the star effect/texture on light poles)
 - Would be cool to animate networked actor and move them along their spline paths (Cropduster/Helicopters/Planes/Tornado)

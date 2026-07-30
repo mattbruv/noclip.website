@@ -54,6 +54,9 @@ import { FakeTextureHolder } from "../TextureHolder";
 import { DrawBatch, MergedGeometry, O3DGeometry } from "./Geometry";
 import { TrackProgram } from "./TrackProgram";
 import { GlowDef, GlowRenderer, GlowShape, glowColorFromRGBA32 } from "./Glow";
+import { CollisionRenderer } from "./Collision";
+import { isDrivable } from "./asset/gmd";
+import { assertExists } from "../util";
 
 const pathBase = `RumbleRacing`;
 const GLOBAL_SCALE = 300.0; // this feels the best
@@ -110,6 +113,9 @@ class RumbleRacingScene implements SceneGfx {
   private showActors: boolean = true;
   private showPowerUps: boolean = true;
   private showPowerUpGlow: boolean = true;
+  private showCollisionPolygons: boolean = false;
+  private showCollisionVertices: boolean = false;
+  private showFences: boolean = false;
   private wireframe: boolean = false;
   private showVertexColors: boolean = true;
   private showTextures: boolean = true;
@@ -117,6 +123,7 @@ class RumbleRacingScene implements SceneGfx {
   public textureHolder = new FakeTextureHolder([]);
   private actorMatrices = new Map<number, mat4>();
   private glowRenderer: GlowRenderer;
+  private collisionRenderer: CollisionRenderer | null = null;
   private powerUps: PowerUp[] = [];
   // Model-space offset of the pickup's bounding-sphere center, which is what the
   // glow primitives are centered on rather than the actor's origin.
@@ -152,6 +159,13 @@ class RumbleRacingScene implements SceneGfx {
 
     this.glowRenderer = new GlowRenderer(cache);
     this.buildPowerUps();
+
+    if (this.trackFile.collision !== null)
+      this.collisionRenderer = new CollisionRenderer(
+        cache,
+        this.trackFile.collision,
+        GLOBAL_SCALE,
+      );
 
     this.linearSampler = cache.createSampler({
       minFilter: GfxTexFilterMode.Bilinear,
@@ -458,6 +472,30 @@ class RumbleRacingScene implements SceneGfx {
 
     if (this.showPowerUps && this.showPowerUpGlow)
       this.renderPowerUpGlows(viewerInput);
+
+    this.renderCollision(viewerInput);
+  }
+
+  // Debug layers go last so they read on top of the track they describe.
+  private renderCollision(viewerInput: ViewerRenderInput): void {
+    const renderer = this.collisionRenderer;
+    if (renderer === null) return;
+
+    const layers = [
+      { layer: renderer.polygons, visible: this.showCollisionPolygons },
+      { layer: renderer.fences, visible: this.showFences },
+      { layer: renderer.vertices, visible: this.showCollisionVertices },
+    ];
+
+    for (const { layer, visible } of layers) {
+      if (!visible || layer === null) continue;
+      renderer.submit(
+        this.renderHelper.renderInstManager,
+        this.blendedRenderInstList,
+        viewerInput,
+        layer,
+      );
+    }
   }
 
   private powerUpMatrix(
@@ -663,6 +701,46 @@ class RumbleRacingScene implements SceneGfx {
       trackGeometryPanel.contents.appendChild(checkbox.elem);
     }
 
+    const collisionPanel = new UI.Panel();
+    collisionPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+    collisionPanel.setTitle(UI.LAYER_ICON, "Collision (GMD)");
+
+    if (this.collisionRenderer === null) {
+      const missing = document.createElement("div");
+      missing.style.padding = "4px 12px";
+      missing.textContent = "No collision data in this track.";
+      collisionPanel.contents.appendChild(missing);
+    } else {
+      const collision = assertExists(this.trackFile.collision);
+      const drivable = collision.polygons.filter(isDrivable).length;
+
+      const addToggle = (
+        label: string,
+        initial: boolean,
+        set: (v: boolean) => void,
+      ) => {
+        const checkbox = new UI.Checkbox(label, initial);
+        checkbox.onchanged = () => set(checkbox.checked);
+        collisionPanel.contents.appendChild(checkbox.elem);
+      };
+
+      addToggle(
+        `Polygons (${drivable} drivable / ${collision.polygons.length})`,
+        this.showCollisionPolygons,
+        (v) => (this.showCollisionPolygons = v),
+      );
+      addToggle(
+        `Vertices (${collision.vertices.length / 3})`,
+        this.showCollisionVertices,
+        (v) => (this.showCollisionVertices = v),
+      );
+      addToggle(
+        `Fences (${collision.fences.length})`,
+        this.showFences,
+        (v) => (this.showFences = v),
+      );
+    }
+
     const renderSettingsPanel = new UI.Panel();
     renderSettingsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
     renderSettingsPanel.setTitle(UI.RENDER_HACKS_ICON, "Render Settings");
@@ -693,12 +771,13 @@ class RumbleRacingScene implements SceneGfx {
       renderSettingsPanel.contents.appendChild(wireframe.elem);
     }
 
-    return [trackGeometryPanel, renderSettingsPanel];
+    return [trackGeometryPanel, collisionPanel, renderSettingsPanel];
   }
 
   public destroy(device: GfxDevice): void {
     this.renderHelper.destroy();
     this.glowRenderer.destroy(device);
+    this.collisionRenderer?.destroy(device);
 
     for (const group of this.trackGroups) group.geometry.destroy(device);
 
