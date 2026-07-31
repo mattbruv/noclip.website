@@ -591,8 +591,9 @@ export function gsMemoryMapReadImagePSMT4_PSMCT16(pixels: Uint8Array, map: GSMem
 
             const cy = ((clutIndex >>> 3) & 0x1) + (csa & 0xE);
             const cx = (clutIndex & 0x07) + ((csa & 0x1) << 3);
-            const p = getPixelAddressPSMCT16(cbp, 1, cx, cy);
-            convertPixelPSMCT16(pixels, dstIdx, map.data[p + 0] | (map.data[p + 1] << 8), texa_0, texa_1);
+            const caddr = getPixelAddressPSMCT16(cbp, 1, cx, cy);
+            const p = map.data[caddr + 0] | (map.data[caddr + 1] << 8)
+            convertPixelPSMCT16(pixels, dstIdx, p, texa_0, texa_1);
 
             dstIdx += 0x04;
         }
@@ -639,8 +640,9 @@ export function gsMemoryMapReadImagePSMT8_PSMCT16(pixels: Uint8Array, map: GSMem
             if (clutIndex & 0x10)
                 cx += 0x08;
 
-            const p = getPixelAddressPSMCT16(cbp, 1, cx, cy);
-            convertPixelPSMCT16(pixels, dstIdx, map.data[p + 0] | (map.data[p + 1] << 8), texa_0, texa_1);
+            const caddr = getPixelAddressPSMCT16(cbp, 1, cx, cy);
+            const p = map.data[caddr + 0] | (map.data[caddr + 1] << 8)
+            convertPixelPSMCT16(pixels, dstIdx, p, texa_0, texa_1);
 
             dstIdx += 0x04;
         }
@@ -721,7 +723,8 @@ export function gsMemoryMapReadImagePSMCT16(pixels: Uint8Array, map: GSMemoryMap
     for (let y = 0; y < rrh; y++) {
         for (let x = 0; x < rrw; x++) {
             const addr = getPixelAddressPSMCT16(dbp, dbw, x, y);
-            convertPixelPSMCT16(pixels, dstIdx, map.data[addr + 0] | (map.data[addr + 1] << 8), texa_0, texa_1);
+            const p = map.data[addr + 0] | (map.data[addr + 1] << 8);
+            convertPixelPSMCT16(pixels, dstIdx, p, texa_0, texa_1);
 
             dstIdx += 0x04;
         }
