@@ -100,7 +100,7 @@ export function extractTexturesFromZTHE(
 
     const size = height * width;
     const texelBytes =
-      zthe.texelStorageFormat === GSPixelStorageFormat.PSMT4 ? size >> 1 : size;
+      zthe.texelStorageFormat === GSPixelStorageFormat.PSMT4 ? size / 2 : size;
 
     const start = txImage.txdaAddressOffset;
     const data = txf.textureData.rawData.slice(start, start + texelBytes);
