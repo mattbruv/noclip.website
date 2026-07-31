@@ -32,6 +32,8 @@ export interface Texture {
   files: TextureFile[];
 }
 
+// These values will make the shared PS2 GS code return the same alpha values
+// that I was originally setting on my own before using the shared code.
 const CLUT16_TA0 = 0x8080;
 const CLUT16_TA1 = 0x0040;
 
@@ -74,7 +76,6 @@ export function extractTexturesFromZTHE(
   const clutStart = clutHeader.cldaStartOffset;
   const clutSize = clutWidth * clutHeight * clutPixelBytes;
   const clutData = txf.clutData.rawData.slice(clutStart, clutStart + clutSize);
-  if (clutData.length < clutSize) throw new Error("CLUT data OOB");
 
   const cbp = clutHeader.vramDest;
 
@@ -91,9 +92,6 @@ export function extractTexturesFromZTHE(
     ArrayBufferSlice.fromView(clutData),
   );
 
-  const baseHeight =
-    zthe.images.length > 0 ? zthe.images[0].blockHeightPixels : 0;
-
   for (let k = 0; k < zthe.images.length; k++) {
     const txImage = zthe.images[k];
 
@@ -105,11 +103,6 @@ export function extractTexturesFromZTHE(
       zthe.texelStorageFormat === GSPixelStorageFormat.PSMT4 ? size >> 1 : size;
 
     const start = txImage.txdaAddressOffset;
-    if (start + texelBytes > txf.textureData.rawData.length) {
-      if (k > 0) break;
-      throw new Error("Texture data OOB");
-    }
-
     const data = txf.textureData.rawData.slice(start, start + texelBytes);
     const tbp0 = txImage.selfPlusMemAllocRes;
     const tbw = txImage.ramDestWidth;
