@@ -1,40 +1,37 @@
 import { vec3 } from "gl-matrix";
 import { Color, colorNewFromRGBA } from "../../Color";
 import { readFourCC } from "../helpers/fourCC";
+import { SHDR } from "../chunk/shoc/shdr";
+import { parseChunks } from "./chunk";
 
-export interface GmdRecord {
-  tag: string;
-  offset: number;
-  size: number;
-  dataOffset: number;
-  dataSize: number;
+// Gmd files are their own thing.
+// they are not related to the 'Gmd' chunks found in O3Ds other than by sharing the same name.
+export interface Gmd {
+  kind: "Gmd";
+  lights: TrackLightData | null;
 }
 
-const RECORD_HEADER_SIZE = 0x10;
+export function parseGmd(buf: Uint8Array, header: SHDR, resName: string): Gmd {
+  const gmd: Gmd = {
+    kind: "Gmd",
+    lights: null,
+  };
 
-export function parseGmdRecords(data: Uint8Array): GmdRecord[] {
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const records: GmdRecord[] = [];
+  const chunks = parseChunks(buf);
 
-  let offset = 0;
-  while (offset + 8 <= data.byteLength) {
-    const tag = readFourCC(data, offset);
-    const size = view.getUint32(offset + 4, true);
-
-    if (!/^[\x20-\x7e]{4}$/.test(tag)) break;
-    if (size < RECORD_HEADER_SIZE || offset + size > data.byteLength) break;
-
-    records.push({
-      tag,
-      offset,
-      size,
-      dataOffset: offset + RECORD_HEADER_SIZE,
-      dataSize: size - RECORD_HEADER_SIZE,
-    });
-    offset += size;
+  for (const chunk of chunks) {
+    const magic = readFourCC(chunk.magic, 0);
+    switch (magic) {
+      case "Ligh":
+        gmd.lights = parseTrackLights(chunk.payload);
+        break;
+      default:
+        // console.warn("Unhandled Trck MAGIC: " + magic + " " + resName);
+        break;
+    }
   }
 
-  return records;
+  return gmd;
 }
 
 const LIGHT_STRIDE = 0x20;
@@ -63,13 +60,12 @@ export interface TrackLightData {
   points: PointLight[];
 }
 
-export function parseTrackLights(data: Uint8Array): TrackLightData | null {
+function parseTrackLights(data: Uint8Array): TrackLightData {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const record = parseGmdRecords(data).find((r) => r.tag === "Ligh");
-  if (record === undefined) return null;
 
-  const glowCount = view.getUint32(record.offset + LIGH_GLOW_COUNT, true);
-  const pointCount = view.getUint32(record.offset + LIGH_POINT_COUNT, true);
+  const glowCount = view.getUint32(LIGH_GLOW_COUNT, true);
+  const pointCount = view.getUint32(LIGH_POINT_COUNT, true);
+  const dataStartOffset = 0x10;
 
   const position = (at: number): vec3 =>
     vec3.fromValues(
@@ -80,7 +76,7 @@ export function parseTrackLights(data: Uint8Array): TrackLightData | null {
 
   const glows: GlowLight[] = [];
   for (let i = 0; i < glowCount; i++) {
-    const at = record.dataOffset + i * LIGHT_STRIDE;
+    const at = dataStartOffset + i * LIGHT_STRIDE;
     const shape = view.getUint8(at + 0x18);
     glows.push({
       position: position(at),
@@ -94,7 +90,7 @@ export function parseTrackLights(data: Uint8Array): TrackLightData | null {
   }
 
   const points: PointLight[] = [];
-  const pointBase = record.dataOffset + glowCount * LIGHT_STRIDE;
+  const pointBase = glowCount * LIGHT_STRIDE;
   for (let i = 0; i < pointCount; i++) {
     const at = pointBase + i * LIGHT_STRIDE;
     points.push({

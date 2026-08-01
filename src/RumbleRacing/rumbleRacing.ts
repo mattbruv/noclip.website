@@ -7,7 +7,7 @@ import {
 import { ObfNode } from "./asset/o3d/obf";
 import { BlendMode } from "./asset/o3d/geometry";
 import { getTextures } from "./asset/txf/TXF";
-import { parseTrackLights, TrackLightData } from "./asset/gmd";
+import { TrackLightData } from "./asset/gmd";
 import { vec2, vec3 } from "gl-matrix";
 import { Color, White } from "../Color";
 
@@ -274,9 +274,8 @@ export function processTrackFile(
         }
         break;
       }
-      case "GenericAsset": {
-        if (res.typeTag === "gmd " && out.lights === null)
-          out.lights = parseTrackLights(resource.rawData());
+      case "Gmd": {
+        out.lights = resource.lights;
         break;
       }
       default: {
