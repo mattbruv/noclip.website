@@ -11,11 +11,7 @@ const RING_SHAPE = GlowShape.Ring32;
 const POINT_RING_WIDTH = 0.02;
 
 function buildGlowDefs(light: GlowLight, scale: number): GlowDef[] {
-  const center = vec3.fromValues(
-    light.position[0] * scale,
-    light.position[1] * scale,
-    light.position[2] * scale,
-  );
+  const center = vec3.scale(vec3.create(), light.position, scale);
   const radius = light.radius * scale;
 
   const colorA = glowColorFromRGBA32(light.colorA);
@@ -73,11 +69,7 @@ function buildPointDef(light: PointLight, scale: number): GlowDef {
   const radius = light.radius * scale;
 
   return {
-    center: vec3.fromValues(
-      light.position[0] * scale,
-      light.position[1] * scale,
-      light.position[2] * scale,
-    ),
+    center: vec3.scale(vec3.create(), light.position, scale),
     colorA: color,
     colorB: color,
     radiusA: radius,

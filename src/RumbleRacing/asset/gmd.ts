@@ -1,3 +1,4 @@
+import { vec3 } from "gl-matrix";
 import { readFourCC } from "../helpers/fourCC";
 
 export interface GmdRecord {
@@ -40,7 +41,7 @@ const LIGH_GLOW_COUNT = 0x08;
 const LIGH_POINT_COUNT = 0x0c;
 
 export interface GlowLight {
-  position: [number, number, number];
+  position: vec3;
   radius: number;
   colorA: number;
   colorB: number;
@@ -50,9 +51,9 @@ export interface GlowLight {
 }
 
 export interface PointLight {
-  position: [number, number, number];
+  position: vec3;
   radius: number;
-  color: [number, number, number];
+  color: vec3;
   next: number;
 }
 
@@ -71,11 +72,12 @@ export function parseTrackLights(data: Uint8Array): TrackLights | null {
   const pointCount = view.getUint32(record.offset + LIGH_POINT_COUNT, true);
   if (glowCount + pointCount > capacity) return null;
 
-  const position = (at: number): [number, number, number] => [
-    view.getFloat32(at + 0x0, true),
-    view.getFloat32(at + 0x4, true),
-    view.getFloat32(at + 0x8, true),
-  ];
+  const position = (at: number): vec3 =>
+    vec3.fromValues(
+      view.getFloat32(at + 0x0, true),
+      view.getFloat32(at + 0x4, true),
+      view.getFloat32(at + 0x8, true),
+    );
 
   const glows: GlowLight[] = [];
   for (let i = 0; i < glowCount; i++) {
@@ -99,11 +101,11 @@ export function parseTrackLights(data: Uint8Array): TrackLights | null {
     points.push({
       position: position(at),
       radius: view.getFloat32(at + 0xc, true),
-      color: [
+      color: vec3.fromValues(
         view.getFloat32(at + 0x10, true),
         view.getFloat32(at + 0x14, true),
         view.getFloat32(at + 0x18, true),
-      ],
+      ),
       next: view.getInt32(at + 0x1c, true),
     });
   }
