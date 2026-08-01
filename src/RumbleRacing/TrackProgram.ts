@@ -100,8 +100,8 @@ layout(std140) uniform ub_MeshParams {
     vec4 u_MeshMisc;
 };
 
-#define u_AlphaTestRef (u_MeshMisc.x)
-#define u_Tint         (u_MeshMisc.yzw)
+#define u_Tint         (u_MeshMisc.xyz)
+#define u_AlphaTestRef (u_MeshMisc.w)
 
 layout(location = 0) uniform sampler2D u_Texture;
 `;

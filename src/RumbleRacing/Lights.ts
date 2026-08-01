@@ -1,5 +1,5 @@
 import { vec3 } from "gl-matrix";
-import { colorNewFromRGBA } from "../Color";
+import { colorNewCopy, colorScale } from "../Color";
 import { GlowDef, GlowShape, glowColorFromRGBA32 } from "./Glow";
 import { GlowLight, PointLight, TrackLights } from "./asset/gmd";
 
@@ -65,12 +65,8 @@ function buildPointDef(light: PointLight, scale: number): GlowDef {
     light.color.b,
     Number.MIN_VALUE,
   );
-  const color = colorNewFromRGBA(
-    light.color.r / peak,
-    light.color.g / peak,
-    light.color.b / peak,
-    1.0,
-  );
+  const color = colorNewCopy(light.color, 1.0);
+  colorScale(color, color, 1.0 / peak);
   const radius = light.radius * scale;
 
   return {

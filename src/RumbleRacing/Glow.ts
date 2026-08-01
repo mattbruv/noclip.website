@@ -1,5 +1,5 @@
 import { vec3 } from "gl-matrix";
-import { Color, colorNewFromRGBA } from "../Color";
+import { Color, colorNewFromRGBA8 } from "../Color";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
@@ -77,12 +77,9 @@ export interface GlowDef {
 }
 
 export function glowColorFromRGBA32(rgba: number): Color {
-  return colorNewFromRGBA(
-    ((rgba >>> 24) & 0xff) / 0xff,
-    ((rgba >>> 16) & 0xff) / 0xff,
-    ((rgba >>> 8) & 0xff) / 0xff,
-    (rgba & 0xff) / 0x80,
-  );
+  const color = colorNewFromRGBA8(rgba);
+  color.a = (rgba & 0xff) / 0x80;
+  return color;
 }
 
 const VERTEX_STRIDE = 3;

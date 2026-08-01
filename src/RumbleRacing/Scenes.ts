@@ -19,7 +19,7 @@ import {
 import {
   fillMatrix4x3,
   fillMatrix4x4,
-  fillVec4,
+  fillVec3v,
 } from "../gfx/helpers/UniformBufferHelpers";
 import { reverseDepthForCompareMode } from "../gfx/helpers/ReversedDepthHelpers";
 import {
@@ -46,6 +46,7 @@ import {
 } from "../gfx/render/GfxRenderInstManager";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
 import { GfxMegaStateDescriptor } from "../gfx/platform/GfxPlatform";
+import { TransparentBlack } from "../Color";
 import { BlendMode } from "./asset/o3d/geometry";
 import { SceneContext, SceneDesc, SceneGroup } from "../SceneBase";
 import { SceneGfx, ViewerRenderInput } from "../viewer";
@@ -69,7 +70,7 @@ const POWERUP_GLOW_RADIUS_SCALE = 0.9;
 const WHITE_TINT: vec3 = vec3.fromValues(1.0, 1.0, 1.0);
 const POWERUP_INNER_TINT: vec3 = vec3.fromValues(0.55, 0.62, 0.66);
 
-const POWERUP_GLOW_CLEAR = glowColorFromRGBA32(0x00000000);
+const POWERUP_GLOW_CLEAR = TransparentBlack;
 const POWERUP_GLOW_RING = glowColorFromRGBA32(0xa8a8ff60);
 const POWERUP_GLOW_STAR = glowColorFromRGBA32(0xb8b8ff80);
 
@@ -302,7 +303,7 @@ class RumbleRacingScene implements SceneGfx {
       16,
     );
     const offs = fillMatrix4x3(meshParams, 0, modelMatrix);
-    fillVec4(meshParams, offs, alphaTestRef, tint[0], tint[1], tint[2]);
+    fillVec3v(meshParams, offs, tint, alphaTestRef);
 
     return renderInst;
   }
