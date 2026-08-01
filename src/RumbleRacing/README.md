@@ -104,6 +104,71 @@ like everything else and nudged 60 scene units towards the camera in the vertex 
 which clears the surface underneath while staying far too small to punch through terrain or
 buildings. Hills, trees and walls occlude them properly.
 
+## Lights (the track `gmd ` resource)
+
+The nine tracks that race in daylight ship no `Ligh` record at all. On the six
+that do not, it holds **two unrelated light arrays back to back**, split by a
+pair of counts in its own header — `+0x08` is how many are in the first group,
+`+0x0C` the second, and the payload is exactly `(a + b) * 0x20` bytes.
+`TrkInfo_ParseTrack` slices it accordingly, then hands every `Trck` section a
+run out of each: a pointer at section `+0x0C` with a count at `+0x39` for the
+first group, `+0x1C` and `+0x3A` for the second. (`Trck+0x10` is the number of
+sections, not of lights, and the record carries a second 0x40-byte array after
+it whose count is at `+0x11`, which none of this touches.)
+
+**Group A are the glow billboards** — the flares on the light poles.
+`TrkInfo_DrawLightGlows` copies each one straight into the `ColGlow` list that
+[Glow.ts](Glow.ts) already implements, so they render through the same path the
+power-up sparkle does:
+
+| Offset | Contents |
+| ------ | -------- |
+| `+0x00` | position; `+0x0C` doubles as its `w` and as the glow radius |
+| `+0x10` | inner color, RGBA8, alpha `0x80` (opaque on the GS scale) |
+| `+0x14` | outer color, the same hue at alpha `0x00` |
+| `+0x18` | shape byte |
+| `+0x1C` | zero in the file; the light-trail slot after load |
+
+The shape byte is queued as `light[0x18] + 0x80`, and that top bit is what
+switches `ColGlow_RenderAllGlowInCurrentList` out of its ordinary one-shape path
+and into a composite of up to three, each sized off the radius: bits 0-1 a
+filled disc out to `0.5 * r` per step, bits 2-4 a star whose value *is* its
+point count (`Star1` through `Star4`) spanning `r` to `1.5 * r`, and bits 5-6 a
+thin ring straddling `0.4 * r` per step. Every descriptor in the game decodes
+inside those field widths, which is the check that the split is right: 831
+lights are a disc plus a three-point star, and the rest are discs, discs with a
+halo, or one four-point variant on Touch And Go. Colors are per-track — amber
+street lights on the two Metropolis courses, red and blue down The Gauntlet,
+magenta on Wild Kingdom, white under Falls Down.
+
+**Group B are point lights**, and nothing about them is directly visible: they
+shade the cars. `GrLi` is their spatial hash — grid dimensions at `+0x08`, X/Z
+origin at `+0x10`, then one `s32` head index per cell, with each light's `+0x1C`
+chaining to the next in the same cell. Both get fixed up to pointers at load.
+`TrkInfo_ComputeLightingEnvironment` derives the cell at **8 world units** a
+side, walks a 2x2 neighbourhood, and keeps the two strongest, where strength is
+`radius / distance - 1` clamped to 2 and dropped at zero. The Lights panel draws
+them as a ring at the radius each one reaches, off by default; the authored
+colors run from a near-black blue fill up to warm white, so the debug rings are
+normalized to stay readable.
+
+Two things the game does that this does not. It only queues a light once the
+section holding it passes the `Visi` test and stops at 160 glows in the list,
+where this draws every light in the track every frame — which costs nothing
+measurable even on Car Go, the heaviest at 407 lights and 814 shapes. And it
+picks its ring between `Ring10` and `Ring32` by view distance, purely to keep
+VU1 fed; every ring here gets the nearest LOD.
+
+The light trails are **not** reproduced. `TrkInfo_GetLightTrails` gives every
+group-A light a slot in `ULightTrail.c`'s pool — a 20-entry ring of transformed
+positions covering the last 0.15 seconds, 0.07 wide, fading out over an alpha
+ramp capped at 0.3, in a fixed warm white `(0.95, 0.95, 0.75)` that ignores the
+light's own color. What `LT_vRenderLightTrail` is not clear about is the space
+it works in: it offsets `x`/`y` by a constant before anything divides by `w`,
+and gates on a `z` between 0 and 10, which is neither view space nor clip space
+as written. Guessing would produce a streak that looks wrong rather than one
+that is missing.
+
 ## Paths (the `Cnet` resources)
 
 Every track carries a handful of `Cnet` resources, parsed by [asset/cnet.ts](asset/cnet.ts).
@@ -150,5 +215,5 @@ choosing, and closes the route back on itself to keep moving.
 
 ## Future Improvements / Cool Ideas
 - Render the Sun/Moon/stars
-- Place instanced "lights" (the star effect/texture on light poles)
+- Pin down the space `LT_vRenderLightTrail` works in and draw the light trails
 - Reproduce the real network movement model in `moveNetworkObject` (banking, pitch, branch selection, and the speed units) rather than the constant-speed traversal used now

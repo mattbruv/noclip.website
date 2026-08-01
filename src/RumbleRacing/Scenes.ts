@@ -64,6 +64,7 @@ import {
   sampleRoute,
 } from "./Networks";
 import { isDrivable } from "./asset/gmd";
+import { TrackLightLayers } from "./Lights";
 import { assertExists } from "../util";
 
 const pathBase = `RumbleRacing`;
@@ -138,6 +139,8 @@ class RumbleRacingScene implements SceneGfx {
   private showActors: boolean = true;
   private showPowerUps: boolean = true;
   private showPowerUpGlow: boolean = true;
+  private showTrackLights: boolean = true;
+  private showPointLights: boolean = false;
   private showCollisionPolygons: boolean = false;
   private showCollisionVertices: boolean = false;
   private showFences: boolean = false;
@@ -148,6 +151,7 @@ class RumbleRacingScene implements SceneGfx {
   public textureHolder = new FakeTextureHolder([]);
   private actorMatrices = new Map<number, mat4>();
   private glowRenderer: GlowRenderer;
+  private trackLights: TrackLightLayers | null = null;
   private collisionRenderer: CollisionRenderer | null = null;
   private networkRenderer: NetworkRenderer | null = null;
   private visibleNetworks = new Set<NetworkLayer>();
@@ -188,6 +192,12 @@ class RumbleRacingScene implements SceneGfx {
 
     this.glowRenderer = new GlowRenderer(cache);
     this.buildPowerUps();
+
+    if (this.trackFile.lights !== null)
+      this.trackLights = new TrackLightLayers(
+        this.trackFile.lights,
+        GLOBAL_SCALE,
+      );
 
     if (this.trackFile.collision !== null)
       this.collisionRenderer = new CollisionRenderer(
@@ -545,6 +555,8 @@ class RumbleRacingScene implements SceneGfx {
     if (this.showPowerUps && this.showPowerUpGlow)
       this.renderPowerUpGlows(viewerInput);
 
+    this.renderTrackLights(viewerInput);
+
     this.renderCollision(viewerInput);
     this.renderNetworks(viewerInput);
   }
@@ -689,6 +701,34 @@ class RumbleRacingScene implements SceneGfx {
           def,
         );
     }
+
+    renderInstManager.popTemplate();
+  }
+
+  // The game only queues a light once the track section holding it passes the
+  // `Visi` test, and stops at 160 glows in the list; neither limit is
+  // reproduced, so every light in the track is drawn every frame.
+  private renderTrackLights(viewerInput: ViewerRenderInput): void {
+    const lights = this.trackLights;
+    if (lights === null) return;
+
+    const showGlows = this.showTrackLights && lights.glows.length > 0;
+    const showPoints = this.showPointLights && lights.points.length > 0;
+    if (!showGlows && !showPoints) return;
+
+    const renderInstManager = this.renderHelper.renderInstManager;
+    this.glowRenderer.pushTemplate(renderInstManager, viewerInput);
+
+    const submit = (def: GlowDef) =>
+      this.glowRenderer.submitGlow(
+        renderInstManager,
+        this.blendedRenderInstList,
+        def,
+      );
+
+    if (showGlows)
+      for (const defs of lights.glows) for (const def of defs) submit(def);
+    if (showPoints) for (const def of lights.points) submit(def);
 
     renderInstManager.popTemplate();
   }
@@ -863,6 +903,40 @@ class RumbleRacingScene implements SceneGfx {
       );
     }
 
+    const lightsPanel = new UI.Panel();
+    lightsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
+    lightsPanel.setTitle(UI.LAYER_ICON, "Lights (GMD)");
+
+    if (this.trackLights === null) {
+      const missing = document.createElement("div");
+      missing.style.padding = "4px 12px";
+      missing.textContent = "This track races in daylight and has no lights.";
+      lightsPanel.contents.appendChild(missing);
+    } else {
+      const lights = this.trackLights;
+
+      const addToggle = (
+        label: string,
+        initial: boolean,
+        set: (v: boolean) => void,
+      ) => {
+        const checkbox = new UI.Checkbox(label, initial);
+        checkbox.onchanged = () => set(checkbox.checked);
+        lightsPanel.contents.appendChild(checkbox.elem);
+      };
+
+      addToggle(
+        `Glows (${lights.glows.length} lights / ${lights.glowShapeCount} shapes)`,
+        this.showTrackLights,
+        (v) => (this.showTrackLights = v),
+      );
+      addToggle(
+        `Point Lights (${lights.points.length})`,
+        this.showPointLights,
+        (v) => (this.showPointLights = v),
+      );
+    }
+
     const pathsPanel = new UI.Panel();
     pathsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
     pathsPanel.setTitle(UI.LAYER_ICON, "Paths (Networks)");
@@ -929,6 +1003,7 @@ class RumbleRacingScene implements SceneGfx {
 
     return [
       trackGeometryPanel,
+      lightsPanel,
       collisionPanel,
       pathsPanel,
       renderSettingsPanel,

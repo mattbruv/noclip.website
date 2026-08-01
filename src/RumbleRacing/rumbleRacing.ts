@@ -7,7 +7,12 @@ import {
 import { ObfNode } from "./asset/o3d/obf";
 import { BlendMode } from "./asset/o3d/geometry";
 import { getTextures } from "./asset/txf/TXF";
-import { parseTrackCollision, TrackCollision } from "./asset/gmd";
+import {
+  parseTrackCollision,
+  parseTrackLights,
+  TrackCollision,
+  TrackLights,
+} from "./asset/gmd";
 import { Network, parseNetwork } from "./asset/cnet";
 import { vec2, vec3 } from "gl-matrix";
 import { Color, White } from "../Color";
@@ -117,6 +122,7 @@ export interface RumbleRacingTrackFile {
   actors: ActorData[];
   textures: TextureData[];
   collision: TrackCollision | null;
+  lights: TrackLights | null;
   networks: NetworkData[];
 }
 
@@ -204,6 +210,7 @@ export function processTrackFile(
     actors: [],
     textures: [],
     collision: null,
+    lights: null,
     networks: [],
   };
 
@@ -301,9 +308,13 @@ export function processTrackFile(
         break;
       }
       case "GenericAsset": {
-        // The track's `gmd ` resource holds the collision mesh cars drive on.
-        if (res.typeTag === "gmd " && out.collision === null)
-          out.collision = parseTrackCollision(resource.rawData());
+        // The track's `gmd ` resource holds the collision mesh cars drive on,
+        // and on the night tracks the lights that hang over it.
+        if (res.typeTag === "gmd " && out.collision === null) {
+          const gmd = resource.rawData();
+          out.collision = parseTrackCollision(gmd);
+          out.lights = parseTrackLights(gmd);
+        }
 
         if (res.typeTag === "Cnet") {
           const network = parseNetwork(resource.rawData());
