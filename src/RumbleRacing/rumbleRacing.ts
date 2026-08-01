@@ -7,7 +7,7 @@ import {
 import { ObfNode } from "./asset/o3d/obf";
 import { BlendMode } from "./asset/o3d/geometry";
 import { getTextures } from "./asset/txf/TXF";
-import { parseTrackLights, TrackLights } from "./asset/gmd";
+import { parseTrackLights, TrackLightData } from "./asset/gmd";
 import { vec2, vec3 } from "gl-matrix";
 import { Color, White } from "../Color";
 
@@ -97,7 +97,7 @@ export interface RumbleRacingTrackFile {
   o3ds: O3DData[];
   actors: ActorData[];
   textures: TextureData[];
-  lights: TrackLights | null;
+  lights: TrackLightData | null; // only half of the tracks have light data, so make it nullable
 }
 
 function buildObfNode(node: ObfNode): ObfJsonNode {

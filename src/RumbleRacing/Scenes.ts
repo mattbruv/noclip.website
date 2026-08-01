@@ -55,7 +55,7 @@ import { FakeTextureHolder } from "../TextureHolder";
 import { DrawBatch, MergedGeometry, O3DGeometry } from "./Geometry";
 import { TrackProgram } from "./TrackProgram";
 import { GlowDef, GlowRenderer, GlowShape, glowColorFromRGBA32 } from "./Glow";
-import { TrackLightLayers } from "./Lights";
+import { buildGlowDefs } from "./Lights";
 
 const pathBase = `RumbleRacing`;
 const GLOBAL_SCALE = 300.0; // this feels the best
@@ -109,7 +109,7 @@ class RumbleRacingScene implements SceneGfx {
   public textureHolder = new FakeTextureHolder([]);
   private actorMatrices = new Map<number, mat4>();
   private glowRenderer: GlowRenderer;
-  private trackLights: TrackLightLayers | null = null;
+  private trackLightGlows: GlowDef[] = [];
   private powerUps: PowerUp[] = [];
   private powerUpGlowOffset = vec3.create();
 
@@ -145,9 +145,8 @@ class RumbleRacingScene implements SceneGfx {
     this.buildPowerUps();
 
     if (this.trackFile.lights !== null)
-      this.trackLights = new TrackLightLayers(
-        this.trackFile.lights,
-        GLOBAL_SCALE,
+      this.trackLightGlows = this.trackFile.lights.glows.flatMap((x) =>
+        buildGlowDefs(x, GLOBAL_SCALE),
       );
 
     this.linearSampler = cache.createSampler({
@@ -529,17 +528,16 @@ class RumbleRacingScene implements SceneGfx {
   }
 
   private renderTrackLights(viewerInput: ViewerRenderInput): void {
-    const lights = this.trackLights;
-    if (lights === null || lights.glows.length === 0) return;
+    if (!this.trackLightGlows.length) return;
 
     const renderInstManager = this.renderHelper.renderInstManager;
     this.glowRenderer.pushTemplate(renderInstManager, viewerInput);
 
-    for (const def of lights.glows)
+    for (const glow of this.trackLightGlows)
       this.glowRenderer.submitGlow(
         renderInstManager,
         this.blendedRenderInstList,
-        def,
+        glow,
       );
 
     renderInstManager.popTemplate();
@@ -687,7 +685,7 @@ class RumbleRacingScene implements SceneGfx {
       this.showTrackLights = showLightsCheckbox.checked;
     };
 
-    if (this.trackLights?.glows.length) {
+    if (this.trackLightGlows.length) {
       renderSettingsPanel.contents.appendChild(showLightsCheckbox.elem);
     }
     renderSettingsPanel.contents.appendChild(showTexturesCheckbox.elem);

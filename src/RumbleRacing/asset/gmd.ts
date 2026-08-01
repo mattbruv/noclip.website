@@ -58,20 +58,18 @@ export interface PointLight {
   next: number;
 }
 
-export interface TrackLights {
+export interface TrackLightData {
   glows: GlowLight[];
   points: PointLight[];
 }
 
-export function parseTrackLights(data: Uint8Array): TrackLights | null {
+export function parseTrackLights(data: Uint8Array): TrackLightData | null {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   const record = parseGmdRecords(data).find((r) => r.tag === "Ligh");
   if (record === undefined) return null;
 
-  const capacity = (record.dataSize / LIGHT_STRIDE) | 0;
   const glowCount = view.getUint32(record.offset + LIGH_GLOW_COUNT, true);
   const pointCount = view.getUint32(record.offset + LIGH_POINT_COUNT, true);
-  if (glowCount + pointCount > capacity) return null;
 
   const position = (at: number): vec3 =>
     vec3.fromValues(

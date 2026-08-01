@@ -1,6 +1,6 @@
 import { vec3 } from "gl-matrix";
 import { GlowDef, GlowShape, glowColorFromRGBA32 } from "./Glow";
-import { GlowLight, TrackLights } from "./asset/gmd";
+import { GlowLight } from "./asset/gmd";
 
 const CORE_SCALE = 0.5;
 const STAR_OUTER_SCALE = 1.5;
@@ -8,7 +8,7 @@ const HALO_SCALE = 0.4;
 const HALO_HALF_WIDTH = 0.015625;
 const RING_SHAPE = GlowShape.Ring32;
 
-function buildGlowDefs(light: GlowLight, scale: number): GlowDef[] {
+export function buildGlowDefs(light: GlowLight, scale: number): GlowDef[] {
   const center = vec3.scale(vec3.create(), light.position, scale);
   const radius = light.radius * scale;
 
@@ -54,12 +54,4 @@ function buildGlowDefs(light: GlowLight, scale: number): GlowDef[] {
   }
 
   return defs;
-}
-
-export class TrackLightLayers {
-  public readonly glows: GlowDef[];
-
-  constructor(lights: TrackLights, scale: number) {
-    this.glows = lights.glows.flatMap((light) => buildGlowDefs(light, scale));
-  }
 }
