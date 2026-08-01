@@ -1,4 +1,5 @@
 import { vec3 } from "gl-matrix";
+import { Color, colorNewFromRGBA } from "../../Color";
 import { readFourCC } from "../helpers/fourCC";
 
 export interface GmdRecord {
@@ -53,7 +54,7 @@ export interface GlowLight {
 export interface PointLight {
   position: vec3;
   radius: number;
-  color: vec3;
+  color: Color;
   next: number;
 }
 
@@ -101,7 +102,7 @@ export function parseTrackLights(data: Uint8Array): TrackLights | null {
     points.push({
       position: position(at),
       radius: view.getFloat32(at + 0xc, true),
-      color: vec3.fromValues(
+      color: colorNewFromRGBA(
         view.getFloat32(at + 0x10, true),
         view.getFloat32(at + 0x14, true),
         view.getFloat32(at + 0x18, true),

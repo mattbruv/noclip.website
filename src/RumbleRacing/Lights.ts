@@ -59,11 +59,16 @@ function buildGlowDefs(light: GlowLight, scale: number): GlowDef[] {
 }
 
 function buildPointDef(light: PointLight, scale: number): GlowDef {
-  const peak = Math.max(...light.color, Number.MIN_VALUE);
+  const peak = Math.max(
+    light.color.r,
+    light.color.g,
+    light.color.b,
+    Number.MIN_VALUE,
+  );
   const color = colorNewFromRGBA(
-    light.color[0] / peak,
-    light.color[1] / peak,
-    light.color[2] / peak,
+    light.color.r / peak,
+    light.color.g / peak,
+    light.color.b / peak,
     1.0,
   );
   const radius = light.radius * scale;
