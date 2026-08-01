@@ -10,7 +10,7 @@ import {
   processTrackFile,
   RumbleRacingTrackFile,
 } from "./rumbleRacing";
-import { mat4, vec3 } from "gl-matrix";
+import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import {
   makeBackbufferDescSimple,
@@ -86,6 +86,17 @@ const POWERUP_SHELL_RATE_Z = 14.639822; // 839 deg/sec
 // SFX_InitPowerup sizes the glow off whichever of the two models is larger,
 // falling back to the inner one when the shell is absent.
 const POWERUP_GLOW_RADIUS_SCALE = 0.9;
+
+const WHITE_TINT: ReadonlyVec3 = vec3.fromValues(1.0, 1.0, 1.0);
+
+// The pickup gem reads bright red because that is how it is authored: PU_INNER
+// is a single untinted batch sampling texture 2108, whose gem patches are
+// #CA2221, with no vertex colors to modulate them. This darkens it by about a
+// half, pulling the red channel down hardest so it cools as it drops, which
+// lands the gem around #6F1516. It is a deliberate departure from the game, not
+// something the data asks for — set it back to WHITE_TINT for what the disc
+// actually shipped, or scale it further towards zero for near-black.
+const POWERUP_INNER_TINT: ReadonlyVec3 = vec3.fromValues(0.55, 0.62, 0.66);
 
 // The three glow definitions SFX_RenderPowerup appends every frame: two rings
 // that fade out towards the middle and the rim, plus a star flare.
@@ -455,6 +466,7 @@ class RumbleRacingScene implements SceneGfx {
     batch: DrawBatch,
     modelMatrix: mat4,
     alphaTestRef: number,
+    tint: ReadonlyVec3 = WHITE_TINT,
   ): GfxRenderInst {
     const renderInst = this.renderHelper.renderInstManager.newRenderInst();
     renderInst.setGfxProgram(
@@ -473,25 +485,35 @@ class RumbleRacingScene implements SceneGfx {
       16,
     );
     const offs = fillMatrix4x3(meshParams, 0, modelMatrix);
-    fillVec4(meshParams, offs, alphaTestRef, 0, 0, 0);
+    fillVec4(meshParams, offs, alphaTestRef, tint[0], tint[1], tint[2]);
 
     return renderInst;
   }
 
-  private submitBatches(geometry: MergedGeometry, modelMatrix: mat4): void {
+  private submitBatches(
+    geometry: MergedGeometry,
+    modelMatrix: mat4,
+    tint: ReadonlyVec3 = WHITE_TINT,
+  ): void {
     for (const batch of geometry.batches) {
       if (batch.blendMode === BlendMode.None) {
         this.renderInstList.submitRenderInst(
-          this.newBatchInst(geometry, batch, modelMatrix, 0.0),
+          this.newBatchInst(geometry, batch, modelMatrix, 0.0, tint),
         );
         continue;
       }
 
       this.renderInstList.submitRenderInst(
-        this.newBatchInst(geometry, batch, modelMatrix, SOLID_PASS_ALPHA_REF),
+        this.newBatchInst(
+          geometry,
+          batch,
+          modelMatrix,
+          SOLID_PASS_ALPHA_REF,
+          tint,
+        ),
       );
 
-      const soft = this.newBatchInst(geometry, batch, modelMatrix, 0.0);
+      const soft = this.newBatchInst(geometry, batch, modelMatrix, 0.0, tint);
       soft.setMegaStateFlags({
         depthWrite: false,
         depthCompare: reverseDepthForCompareMode(GfxCompareMode.Less),
@@ -672,7 +694,11 @@ class RumbleRacingScene implements SceneGfx {
 
     for (const powerUp of this.powerUps) {
       if (inner !== undefined)
-        this.submitBatches(inner, this.powerUpMatrix(powerUp, viewerInput));
+        this.submitBatches(
+          inner,
+          this.powerUpMatrix(powerUp, viewerInput),
+          POWERUP_INNER_TINT,
+        );
       if (shell !== undefined)
         this.submitBatches(
           shell,

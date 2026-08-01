@@ -61,6 +61,14 @@ Hover height comes from `TrkInfo_GetTerrainInfoFunc` at init time, so like the o
 it is scraped from a memory dump rather than reverse engineered — see
 [tools/actorTransforms.ts](tools/actorTransforms.ts) above.
 
+The gem is drawn darker here than the game draws it, and that is a choice rather than a
+finding. `PU_INNER` is one untinted batch sampling texture 2108, whose gem patches are
+`#CA2221` flat, with no vertex colors to modulate them — so the bright red is exactly what
+the disc ships. `POWERUP_INNER_TINT` in [Scenes.ts](Scenes.ts) multiplies it down by about
+a half, pulling the red channel hardest so it cools as it darkens; set it to `WHITE_TINT`
+to get the authored look back, or scale it further towards zero for near-black. Nothing
+else in the scene is tinted, and the shell, ribbon and sparkles are left alone.
+
 The one thing not read out of the machine code is the order `mat44flt_EulerAngles`
 composes its three rotations in — that is inside the VU0 macro ops, and the renderer
 assumes Y, then X, then Z.

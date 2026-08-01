@@ -70,6 +70,10 @@ void main() {
         discard;
 #endif
 
+    // Applied after the alpha test so a tinted batch still cuts out on the
+    // alpha the artist authored.
+    color.rgb *= u_Tint;
+
 #if defined(USE_VERTEX_COLOR) || defined(UNLIT)
     gl_FragColor = color;
 #else
@@ -99,6 +103,7 @@ layout(std140) uniform ub_MeshParams {
 };
 
 #define u_AlphaTestRef (u_MeshMisc.x)
+#define u_Tint         (u_MeshMisc.yzw)
 
 layout(location = 0) uniform sampler2D u_Texture;
 `;
