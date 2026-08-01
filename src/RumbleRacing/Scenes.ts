@@ -3,10 +3,7 @@ import {
   ActorTransforms,
   ActorType,
   ExcludeInfo,
-  GLOBAL_EXTRA_RESOURCE_INDICES,
   ObfData,
-  POWERUP_MODEL_RESOURCE_INDEX,
-  POWERUP_SHELL_RESOURCE_INDEX,
   processTrackFile,
   RumbleRacingTrackFile,
 } from "./rumbleRacing";
@@ -112,6 +109,8 @@ class RumbleRacingScene implements SceneGfx {
   private trackLightGlows: GlowDef[] = [];
   private powerUps: PowerUp[] = [];
   private powerUpGlowOffset = vec3.create();
+  private powerUpInnerIndex: number | undefined;
+  private powerUpOuterIndex: number | undefined;
 
   constructor(
     private sceneContext: SceneContext,
@@ -387,10 +386,14 @@ class RumbleRacingScene implements SceneGfx {
   }
 
   private buildPowerUps(): void {
-    const findModel = (resourceIndex: number) =>
-      this.trackFile.o3ds.find((o3d) => o3d.resourceIndex === resourceIndex);
-    const model = findModel(POWERUP_MODEL_RESOURCE_INDEX);
-    const shell = findModel(POWERUP_SHELL_RESOURCE_INDEX);
+    const findModel = (name: string) =>
+      this.trackFile.o3ds.find((o3d) => o3d.name.includes(name));
+
+    const model = findModel("PU_INNER");
+    const shell = findModel("PU_OUTER");
+
+    this.powerUpInnerIndex = model?.resourceIndex;
+    this.powerUpOuterIndex = shell?.resourceIndex;
 
     const innerSphere = model?.boundingSphere ?? null;
     const shellSphere = shell?.boundingSphere ?? null;
@@ -483,10 +486,14 @@ class RumbleRacingScene implements SceneGfx {
   }
 
   private renderPowerUpModels(viewerInput: ViewerRenderInput): void {
-    const inner = this.o3dGeometries.get(POWERUP_MODEL_RESOURCE_INDEX)
-      ?.frames[0];
-    const shell = this.o3dGeometries.get(POWERUP_SHELL_RESOURCE_INDEX)
-      ?.frames[0];
+    const inner =
+      this.powerUpInnerIndex !== undefined
+        ? this.o3dGeometries.get(this.powerUpInnerIndex)?.frames[0]
+        : undefined;
+    const shell =
+      this.powerUpOuterIndex !== undefined
+        ? this.o3dGeometries.get(this.powerUpOuterIndex)?.frames[0]
+        : undefined;
 
     for (const powerUp of this.powerUps) {
       if (inner !== undefined)
@@ -814,14 +821,8 @@ class RumbleRacingSceneDesc implements SceneDesc {
       ),
     );
 
-    const existingO3DIds = new Set(trackData.o3ds.map((x) => x.resourceIndex));
-    trackData.o3ds.push(
-      ...shared.globalTrackFile.o3ds.filter(
-        (o3d) =>
-          GLOBAL_EXTRA_RESOURCE_INDICES.has(o3d.resourceIndex) &&
-          !existingO3DIds.has(o3d.resourceIndex),
-      ),
-    );
+    // Add powerup models (the only models we parsed out of the global track file)
+    trackData.o3ds.push(...shared.globalTrackFile.o3ds);
 
     return new RumbleRacingScene(
       sceneContext,

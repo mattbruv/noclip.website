@@ -56,14 +56,6 @@ export const enum ActorType {
   PowerUp = 8,
 }
 
-export const POWERUP_MODEL_RESOURCE_INDEX = 5011;
-export const POWERUP_SHELL_RESOURCE_INDEX = 5012;
-
-export const GLOBAL_EXTRA_RESOURCE_INDICES = new Set([
-  POWERUP_MODEL_RESOURCE_INDEX,
-  POWERUP_SHELL_RESOURCE_INDEX,
-]);
-
 type MatrixRow = [x: number, y: number, z: number, w: number];
 export type ActorTransforms = Record<number, ActorMatrix>;
 
@@ -205,7 +197,7 @@ export function processTrackFile(
     if (
       isGlobalFile &&
       !res.resourceName.includes("GLOBAL") &&
-      !GLOBAL_EXTRA_RESOURCE_INDICES.has(res.resourceIndex)
+      !res.resourceName.includes("PU_") // parse out powerups
     )
       continue;
 
@@ -228,9 +220,7 @@ export function processTrackFile(
             x: resource.x,
             y: resource.y,
             z: resource.z,
-            o3dResourceIndex: isPowerUp
-              ? POWERUP_MODEL_RESOURCE_INDEX
-              : resource.o3dResourceIndex,
+            o3dResourceIndex: resource.o3dResourceIndex,
             transform: undefined,
           });
         }
