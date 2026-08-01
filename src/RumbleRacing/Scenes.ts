@@ -89,7 +89,6 @@ interface TrackGeometryGroup {
 interface PowerUp {
   baseMatrix: mat4;
   glowCenter: vec3;
-  glowRadius: number;
   glowDefs: GlowDef[];
 }
 
@@ -154,9 +153,7 @@ class RumbleRacingScene implements SceneGfx {
     this.glowRenderer = new GlowRenderer(cache);
     this.buildPowerUps();
 
-    const powerUpGlowDefs = this.powerUps
-      .filter((x) => x.glowRadius > 0.0)
-      .flatMap((x) => x.glowDefs);
+    const powerUpGlowDefs = this.powerUps.flatMap((x) => x.glowDefs);
     if (powerUpGlowDefs.length > 0)
       this.powerUpGlowBatch = new GlowBatch(
         cache.device,
@@ -472,12 +469,7 @@ class RumbleRacingScene implements SceneGfx {
         },
       ];
 
-      this.powerUps.push({
-        baseMatrix,
-        glowCenter,
-        glowRadius: radius,
-        glowDefs,
-      });
+      this.powerUps.push({ baseMatrix, glowCenter, glowDefs });
     }
   }
 
