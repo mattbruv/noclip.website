@@ -89,11 +89,11 @@ class GlowStripBuilder {
   private indices: number[] = [];
   private stripStart = 0;
 
-  public startStrip(): void {
+  public startStrip() {
     this.stripStart = this.vertices.length / VERTEX_STRIDE;
   }
 
-  public addPoint(x: number, y: number, vertexClass: number): void {
+  public addPoint(x: number, y: number, vertexClass: number) {
     const index = this.vertices.length / VERTEX_STRIDE;
     this.vertices.push(x, y, vertexClass);
 
@@ -101,12 +101,12 @@ class GlowStripBuilder {
       this.indices.push(index - 2, index - 1, index);
   }
 
-  public addPointPair(x: number, y: number): void {
+  public addPointPair(x: number, y: number) {
     this.addPoint(x, y, 1.0);
     this.addPoint(x, y, 0.0);
   }
 
-  public finish(): { vertices: Float32Array; indices: Uint32Array } {
+  public finish() {
     return {
       vertices: new Float32Array(this.vertices),
       indices: new Uint32Array(this.indices),
