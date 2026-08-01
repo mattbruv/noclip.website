@@ -194,10 +194,11 @@ export function processTrackFile(
       continue;
     }
 
+    // We only want to parse some specific things from the shared global file
     if (
       isGlobalFile &&
-      !res.resourceName.includes("GLOBAL") &&
-      !res.resourceName.includes("PU_") // parse out powerups
+      !res.resourceName.includes("GLOBAL.TXF") && // parse out shared textures
+      !res.resourceName.includes("PU_") // parse out powerup models
     )
       continue;
 
