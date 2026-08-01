@@ -16,7 +16,7 @@ export function buildGlowDefs(light: GlowLight, scale: number): GlowDef[] {
   const colorB = glowColorFromRGBA32(light.colorB);
   const defs: GlowDef[] = [];
 
-  if (light.core !== 0)
+  if (light.core)
     defs.push({
       center,
       colorA,
@@ -27,7 +27,7 @@ export function buildGlowDefs(light: GlowLight, scale: number): GlowDef[] {
       shape: RING_SHAPE,
     });
 
-  if (light.star !== 0)
+  if (light.star)
     defs.push({
       center,
       colorA,
@@ -38,7 +38,7 @@ export function buildGlowDefs(light: GlowLight, scale: number): GlowDef[] {
       shape: GlowShape.Star1 + (light.star - 1),
     });
 
-  if (light.halo !== 0) {
+  if (light.halo) {
     const ring = HALO_SCALE * radius * light.halo;
     const width = HALO_HALF_WIDTH * scale;
     for (const outer of [ring + width, ring - width])
