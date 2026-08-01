@@ -1,14 +1,12 @@
 import { vec3 } from "gl-matrix";
-import { colorNewCopy, colorScale } from "../Color";
 import { GlowDef, GlowShape, glowColorFromRGBA32 } from "./Glow";
-import { GlowLight, PointLight, TrackLights } from "./asset/gmd";
+import { GlowLight, TrackLights } from "./asset/gmd";
 
 const CORE_SCALE = 0.5;
 const STAR_OUTER_SCALE = 1.5;
 const HALO_SCALE = 0.4;
 const HALO_HALF_WIDTH = 0.015625;
 const RING_SHAPE = GlowShape.Ring32;
-const POINT_RING_WIDTH = 0.02;
 
 function buildGlowDefs(light: GlowLight, scale: number): GlowDef[] {
   const center = vec3.scale(vec3.create(), light.position, scale);
@@ -58,38 +56,10 @@ function buildGlowDefs(light: GlowLight, scale: number): GlowDef[] {
   return defs;
 }
 
-function buildPointDef(light: PointLight, scale: number): GlowDef {
-  const peak = Math.max(
-    light.color.r,
-    light.color.g,
-    light.color.b,
-    Number.MIN_VALUE,
-  );
-  const color = colorNewCopy(light.color, 1.0);
-  colorScale(color, color, 1.0 / peak);
-  const radius = light.radius * scale;
-
-  return {
-    center: vec3.scale(vec3.create(), light.position, scale),
-    colorA: color,
-    colorB: color,
-    radiusA: radius,
-    radiusB: radius * (1.0 - POINT_RING_WIDTH),
-    angle: 0.0,
-    shape: RING_SHAPE,
-  };
-}
-
 export class TrackLightLayers {
-  public readonly glows: GlowDef[][];
-  public readonly points: GlowDef[];
+  public readonly glows: GlowDef[];
 
   constructor(lights: TrackLights, scale: number) {
-    this.glows = lights.glows.map((light) => buildGlowDefs(light, scale));
-    this.points = lights.points.map((light) => buildPointDef(light, scale));
-  }
-
-  public get glowShapeCount(): number {
-    return this.glows.reduce((total, defs) => total + defs.length, 0);
+    this.glows = lights.glows.flatMap((light) => buildGlowDefs(light, scale));
   }
 }

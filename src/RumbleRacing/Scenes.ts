@@ -101,9 +101,7 @@ class RumbleRacingScene implements SceneGfx {
   private textureMap = new Map<number, GfxTexture>();
   private showActors: boolean = true;
   private showPowerUps: boolean = true;
-  private showPowerUpGlow: boolean = true;
   private showTrackLights: boolean = true;
-  private showPointLights: boolean = false;
   private wireframe: boolean = false;
   private showVertexColors: boolean = true;
   private showTextures: boolean = true;
@@ -384,10 +382,9 @@ class RumbleRacingScene implements SceneGfx {
 
     this.renderHelper.renderInstManager.popTemplate();
 
-    if (this.showPowerUps && this.showPowerUpGlow)
-      this.renderPowerUpGlows(viewerInput);
+    if (this.showPowerUps) this.renderPowerUpGlows(viewerInput);
 
-    this.renderTrackLights(viewerInput);
+    if (this.showTrackLights) this.renderTrackLights(viewerInput);
   }
 
   private buildPowerUps(): void {
@@ -533,25 +530,17 @@ class RumbleRacingScene implements SceneGfx {
 
   private renderTrackLights(viewerInput: ViewerRenderInput): void {
     const lights = this.trackLights;
-    if (lights === null) return;
-
-    const showGlows = this.showTrackLights && lights.glows.length > 0;
-    const showPoints = this.showPointLights && lights.points.length > 0;
-    if (!showGlows && !showPoints) return;
+    if (lights === null || lights.glows.length === 0) return;
 
     const renderInstManager = this.renderHelper.renderInstManager;
     this.glowRenderer.pushTemplate(renderInstManager, viewerInput);
 
-    const submit = (def: GlowDef) =>
+    for (const def of lights.glows)
       this.glowRenderer.submitGlow(
         renderInstManager,
         this.blendedRenderInstList,
         def,
       );
-
-    if (showGlows)
-      for (const defs of lights.glows) for (const def of defs) submit(def);
-    if (showPoints) for (const def of lights.points) submit(def);
 
     renderInstManager.popTemplate();
   }
@@ -668,56 +657,12 @@ class RumbleRacingScene implements SceneGfx {
 
     trackGeometryPanel.contents.appendChild(showPowerUpsCheckbox.elem);
 
-    const showPowerUpGlowCheckbox = new UI.Checkbox(
-      "Power-Up Glow",
-      this.showPowerUpGlow,
-    );
-    showPowerUpGlowCheckbox.onchanged = () => {
-      this.showPowerUpGlow = showPowerUpGlowCheckbox.checked;
-    };
-
-    trackGeometryPanel.contents.appendChild(showPowerUpGlowCheckbox.elem);
-
     for (const group of this.trackGroups) {
       const checkbox = new UI.Checkbox(group.label, group.visible);
       checkbox.onchanged = () => {
         group.visible = checkbox.checked;
       };
       trackGeometryPanel.contents.appendChild(checkbox.elem);
-    }
-
-    const lightsPanel = new UI.Panel();
-    lightsPanel.customHeaderBackgroundColor = UI.COOL_BLUE_COLOR;
-    lightsPanel.setTitle(UI.LAYER_ICON, "Lights (GMD)");
-
-    if (this.trackLights === null) {
-      const missing = document.createElement("div");
-      missing.style.padding = "4px 12px";
-      missing.textContent = "This track races in daylight and has no lights.";
-      lightsPanel.contents.appendChild(missing);
-    } else {
-      const lights = this.trackLights;
-
-      const addToggle = (
-        label: string,
-        initial: boolean,
-        set: (v: boolean) => void,
-      ) => {
-        const checkbox = new UI.Checkbox(label, initial);
-        checkbox.onchanged = () => set(checkbox.checked);
-        lightsPanel.contents.appendChild(checkbox.elem);
-      };
-
-      addToggle(
-        `Glows (${lights.glows.length} lights / ${lights.glowShapeCount} shapes)`,
-        this.showTrackLights,
-        (v) => (this.showTrackLights = v),
-      );
-      addToggle(
-        `Point Lights (${lights.points.length})`,
-        this.showPointLights,
-        (v) => (this.showPointLights = v),
-      );
     }
 
     const renderSettingsPanel = new UI.Panel();
@@ -732,14 +677,21 @@ class RumbleRacingScene implements SceneGfx {
       this.showVertexColors = showVertexColorsCheckbox.checked;
     };
 
-    renderSettingsPanel.contents.appendChild(showVertexColorsCheckbox.elem);
-
     const showTexturesCheckbox = new UI.Checkbox("Textures", this.showTextures);
     showTexturesCheckbox.onchanged = () => {
       this.showTextures = showTexturesCheckbox.checked;
     };
 
+    const showLightsCheckbox = new UI.Checkbox("Lights", this.showTrackLights);
+    showLightsCheckbox.onchanged = () => {
+      this.showTrackLights = showLightsCheckbox.checked;
+    };
+
+    if (this.trackLights?.glows.length) {
+      renderSettingsPanel.contents.appendChild(showLightsCheckbox.elem);
+    }
     renderSettingsPanel.contents.appendChild(showTexturesCheckbox.elem);
+    renderSettingsPanel.contents.appendChild(showVertexColorsCheckbox.elem);
 
     if (this.renderHelper.device.queryLimits().wireframeSupported) {
       const wireframe = new UI.Checkbox("Wireframe", false);
@@ -750,7 +702,7 @@ class RumbleRacingScene implements SceneGfx {
       renderSettingsPanel.contents.appendChild(wireframe.elem);
     }
 
-    return [trackGeometryPanel, lightsPanel, renderSettingsPanel];
+    return [trackGeometryPanel, renderSettingsPanel];
   }
 
   public destroy(device: GfxDevice): void {
