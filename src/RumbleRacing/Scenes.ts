@@ -64,6 +64,9 @@ const POWERUP_SHELL_RATE_X = 1.8849558;
 const POWERUP_SHELL_RATE_Z = 14.639822;
 const POWERUP_GLOW_RADIUS_SCALE = 0.9;
 
+// The powerups in the final game have a red color in the data
+// but there is some kind of environment map/reflective surface shader applied by the VU
+// I have not figured this out, so I'm making it a bit darker red to get close to that appearance without implementing that yet.
 const WHITE_TINT: vec3 = vec3.fromValues(1.0, 1.0, 1.0);
 const POWERUP_INNER_TINT: vec3 = vec3.fromValues(0.55, 0.62, 0.66);
 
