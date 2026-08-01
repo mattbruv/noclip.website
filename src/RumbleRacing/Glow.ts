@@ -1,4 +1,4 @@
-import { ReadonlyVec3 } from "gl-matrix";
+import { vec3 } from "gl-matrix";
 import { Color, colorNewFromRGBA } from "../Color";
 import { createBufferFromData } from "../gfx/helpers/BufferHelpers";
 import { setAttachmentStateSimple } from "../gfx/helpers/GfxMegaStateDescriptorHelpers";
@@ -67,7 +67,7 @@ const GLOW_SHAPE_PARAMS: { star: boolean; count: number }[] = [
 ];
 
 export interface GlowDef {
-  center: ReadonlyVec3;
+  center: vec3;
   colorA: Color;
   colorB: Color;
   radiusA: number;

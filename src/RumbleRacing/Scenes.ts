@@ -10,7 +10,7 @@ import {
   processTrackFile,
   RumbleRacingTrackFile,
 } from "./rumbleRacing";
-import { mat4, ReadonlyVec3, vec3 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
 import { IS_DEVELOPMENT } from "../BuildVersion";
 import {
   makeBackbufferDescSimple,
@@ -66,8 +66,8 @@ const POWERUP_SHELL_RATE_X = 1.8849558;
 const POWERUP_SHELL_RATE_Z = 14.639822;
 const POWERUP_GLOW_RADIUS_SCALE = 0.9;
 
-const WHITE_TINT: ReadonlyVec3 = vec3.fromValues(1.0, 1.0, 1.0);
-const POWERUP_INNER_TINT: ReadonlyVec3 = vec3.fromValues(0.55, 0.62, 0.66);
+const WHITE_TINT: vec3 = vec3.fromValues(1.0, 1.0, 1.0);
+const POWERUP_INNER_TINT: vec3 = vec3.fromValues(0.55, 0.62, 0.66);
 
 const POWERUP_GLOW_CLEAR = glowColorFromRGBA32(0x00000000);
 const POWERUP_GLOW_RING = glowColorFromRGBA32(0xa8a8ff60);
@@ -283,7 +283,7 @@ class RumbleRacingScene implements SceneGfx {
     batch: DrawBatch,
     modelMatrix: mat4,
     alphaTestRef: number,
-    tint: ReadonlyVec3 = WHITE_TINT,
+    tint: vec3 = WHITE_TINT,
   ): GfxRenderInst {
     const renderInst = this.renderHelper.renderInstManager.newRenderInst();
     renderInst.setGfxProgram(
@@ -310,7 +310,7 @@ class RumbleRacingScene implements SceneGfx {
   private submitBatches(
     geometry: MergedGeometry,
     modelMatrix: mat4,
-    tint: ReadonlyVec3 = WHITE_TINT,
+    tint: vec3 = WHITE_TINT,
   ): void {
     for (const batch of geometry.batches) {
       if (batch.blendMode === BlendMode.None) {
