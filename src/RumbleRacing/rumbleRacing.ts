@@ -7,6 +7,7 @@ import {
 import { ObfNode } from "./asset/o3d/obf";
 import { BlendMode } from "./asset/o3d/geometry";
 import { getTextures } from "./asset/txf/TXF";
+import { parseTrackLights, TrackLights } from "./asset/gmd";
 import { vec2, vec3 } from "gl-matrix";
 import { Color, White } from "../Color";
 
@@ -43,7 +44,25 @@ export interface O3DData {
   resourceIndex: number;
   isAnimated: boolean;
   obfs: ObfData[];
+  boundingSphere: BoundingSphere | null;
 }
+
+export interface BoundingSphere {
+  center: vec3;
+  radius: number;
+}
+
+export const enum ActorType {
+  PowerUp = 8,
+}
+
+export const POWERUP_MODEL_RESOURCE_INDEX = 5011;
+export const POWERUP_SHELL_RESOURCE_INDEX = 5012;
+
+export const GLOBAL_EXTRA_RESOURCE_INDICES = new Set([
+  POWERUP_MODEL_RESOURCE_INDEX,
+  POWERUP_SHELL_RESOURCE_INDEX,
+]);
 
 type MatrixRow = [x: number, y: number, z: number, w: number];
 export type ActorTransforms = Record<number, ActorMatrix>;
@@ -58,6 +77,7 @@ export type ActorMatrix = [
 export interface ActorData {
   name: string;
   resourceIndex: number;
+  actorType: number;
   x: number;
   y: number;
   z: number;
@@ -77,6 +97,7 @@ export interface RumbleRacingTrackFile {
   o3ds: O3DData[];
   actors: ActorData[];
   textures: TextureData[];
+  lights: TrackLights | null;
 }
 
 function buildObfNode(node: ObfNode): ObfJsonNode {
@@ -162,6 +183,7 @@ export function processTrackFile(
     o3ds: [],
     actors: [],
     textures: [],
+    lights: null,
   };
 
   const track = parseTrackFile(rawData, "track");
@@ -174,12 +196,18 @@ export function processTrackFile(
       res.typeTag !== "txf2" &&
       res.typeTag !== "obf " &&
       res.typeTag !== "o3d " &&
-      res.typeTag !== "o3da"
+      res.typeTag !== "o3da" &&
+      res.typeTag !== "gmd "
     ) {
       continue;
     }
 
-    if (isGlobalFile && !res.resourceName.includes("GLOBAL")) continue;
+    if (
+      isGlobalFile &&
+      !res.resourceName.includes("GLOBAL") &&
+      !GLOBAL_EXTRA_RESOURCE_INDICES.has(res.resourceIndex)
+    )
+      continue;
 
     let resource: ParsedAsset;
     try {
@@ -191,14 +219,18 @@ export function processTrackFile(
 
     switch (resource.kind) {
       case "Actor": {
-        if (resource.o3dResourceIndex > 0) {
+        const isPowerUp = resource.actorType === ActorType.PowerUp;
+        if (resource.o3dResourceIndex > 0 || isPowerUp) {
           out.actors.push({
             name: res.resourceName,
             resourceIndex: res.resourceIndex,
+            actorType: resource.actorType,
             x: resource.x,
             y: resource.y,
             z: resource.z,
-            o3dResourceIndex: resource.o3dResourceIndex,
+            o3dResourceIndex: isPowerUp
+              ? POWERUP_MODEL_RESOURCE_INDEX
+              : resource.o3dResourceIndex,
             transform: undefined,
           });
         }
@@ -216,11 +248,16 @@ export function processTrackFile(
           name: `obf_${idx}`,
           rootNode: buildObfNode(obf.rootNode),
         }));
+        const bounds = resource.gmds[0]?.bounds ?? null;
         out.o3ds.push({
           name: res.resourceName,
           resourceIndex: res.resourceIndex,
           isAnimated: resource.isAnimated,
           obfs,
+          boundingSphere:
+            bounds !== null
+              ? { center: bounds.sphereCenter, radius: bounds.sphereRadius }
+              : null,
         });
         break;
       }
@@ -235,6 +272,11 @@ export function processTrackFile(
             height: base.height,
           });
         }
+        break;
+      }
+      case "GenericAsset": {
+        if (res.typeTag === "gmd " && out.lights === null)
+          out.lights = parseTrackLights(resource.rawData());
         break;
       }
       default: {
