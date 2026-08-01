@@ -133,13 +133,24 @@ The shape byte is queued as `light[0x18] + 0x80`, and that top bit is what
 switches `ColGlow_RenderAllGlowInCurrentList` out of its ordinary one-shape path
 and into a composite of up to three, each sized off the radius: bits 0-1 a
 filled disc out to `0.5 * r` per step, bits 2-4 a star whose value *is* its
-point count (`Star1` through `Star4`) spanning `r` to `1.5 * r`, and bits 5-6 a
-thin ring straddling `0.4 * r` per step. Every descriptor in the game decodes
+point count (`Star1` through `Star4`) running solid to `r` and fading out by
+`1.5 * r`, and bits 5-6 a thin ring straddling `0.4 * r` per step. Every
+descriptor in the game decodes
 inside those field widths, which is the check that the split is right: 831
 lights are a disc plus a three-point star, and the rest are discs, discs with a
 halo, or one four-point variant on Touch And Go. Colors are per-track — amber
 street lights on the two Metropolis courses, red and blue down The Gauntlet,
 magenta on Wild Kingdom, white under Falls Down.
+
+A star is **two** strips per bow-tie, not one, and `ColGlow_StartGlowStrip`
+allocates `points * 0xe` vertices to say so: ten for the five point pairs of the
+outline, then four more that are all class A, walked tip, waist, waist, tip so
+the two triangles between them fill the bow-tie in. Miss that second strip and
+every triangle left has one vertex at the waist and two along the same spike, so
+the shape collapses to a sliver and rasterizes as a pair of thin edges — spikes
+drawn as outlines. The power-up flare never shows this, because its star sets
+`colorA` to `0x00000000` and the body it fills with is transparent; the track
+lights put an opaque color there, so on them it is the whole effect.
 
 **Group B are point lights**, and nothing about them is directly visible: they
 shade the cars. `GrLi` is their spatial hash — grid dimensions at `+0x08`, X/Z

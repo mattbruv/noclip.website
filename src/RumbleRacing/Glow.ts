@@ -107,17 +107,24 @@ class GlowStripBuilder {
     this.stripStart = this.vertices.length / VERTEX_STRIDE;
   }
 
-  // One call per outline point: the same direction is emitted twice, once for
-  // each class, so the strip spans from radius A to radius B.
-  public addPointPair(x: number, y: number): void {
-    const base = this.vertices.length / VERTEX_STRIDE;
-    this.vertices.push(x, y, 1.0);
-    this.vertices.push(x, y, 0.0);
+  // ColGlow_AddVertex, with the class taken from bit 0 of the vertex tag. The
+  // first two vertices of a strip carry the tag's bit 1 as well, which is what
+  // suppresses a triangle until the strip has been primed.
+  public addPoint(x: number, y: number, vertexClass: number): void {
+    const index = this.vertices.length / VERTEX_STRIDE;
+    this.vertices.push(x, y, vertexClass);
 
     // Triangulate the strip as it grows. Winding does not matter: glows are
     // drawn with culling off, exactly like the rest of the game's geometry.
-    for (let i = Math.max(base, this.stripStart + 2); i < base + 2; i++)
-      this.indices.push(i - 2, i - 1, i);
+    if (index >= this.stripStart + 2)
+      this.indices.push(index - 2, index - 1, index);
+  }
+
+  // One call per outline point: the same direction is emitted twice, once for
+  // each class, so the strip spans from radius A to radius B.
+  public addPointPair(x: number, y: number): void {
+    this.addPoint(x, y, 1.0);
+    this.addPoint(x, y, 0.0);
   }
 
   public finish(): { vertices: Float32Array; indices: Uint32Array } {
@@ -142,23 +149,42 @@ function buildRing(segments: number): GlowStripBuilder {
   return builder;
 }
 
-// ColGlow_CreateStarSmooth: `points` bow-ties, each one a separate sub-strip of
-// five points a quarter turn apart. The alternating scale pinches the outline
-// in at the waist, leaving two long spikes per bow-tie.
+// ColGlow_CreateStarSmooth: `points` bow-ties, each built from two strips. The
+// alternating scale pinches both of them in at the waist, leaving two long
+// spikes per bow-tie.
 const STAR_WAIST_SCALE = 0.03125;
+
+// The order the body strip walks its four quarter-turns in — tip, waist, waist,
+// tip — so that the two triangles between them cover the bow-tie rather than
+// folding over it. `ColGlow_CreateStarSmooth` gets there by counting up and
+// swapping 2 for 3 and 4 for 2 on the way.
+const STAR_BODY_ORDER = [0, 1, 3, 2];
 
 function buildStar(points: number): GlowStripBuilder {
   const builder = new GlowStripBuilder();
 
+  const direction = (base: number, k: number): [number, number] => {
+    const theta = base + (k * Math.PI) / 2.0;
+    const scale = (k & 1) !== 0 ? STAR_WAIST_SCALE : 1.0;
+    return [Math.cos(theta) * scale, Math.sin(theta) * scale];
+  };
+
   for (let i = 0; i < points; i++) {
     const base = Math.PI / 2.0 + (i * Math.PI) / points;
-    builder.startStrip();
 
-    for (let k = 0; k <= 4; k++) {
-      const theta = base + (k * Math.PI) / 2.0;
-      const scale = (k & 1) !== 0 ? STAR_WAIST_SCALE : 1.0;
-      builder.addPointPair(Math.cos(theta) * scale, Math.sin(theta) * scale);
-    }
+    // The outline, five point pairs a quarter turn apart. On its own this is
+    // only the rim: every one of its triangles has a vertex at the waist and
+    // two along the same spike, so it collapses to a sliver along each spike
+    // and rasterizes as a pair of thin edges.
+    builder.startStrip();
+    for (let k = 0; k <= 4; k++) builder.addPointPair(...direction(base, k));
+
+    // The body, four vertices that are all class A. This is what actually fills
+    // the two spikes in, and it is why a star reads as solid out to radius A
+    // and only fades over the span from A to B.
+    builder.startStrip();
+    for (const k of STAR_BODY_ORDER)
+      builder.addPoint(...direction(base, k), 1.0);
   }
 
   return builder;
