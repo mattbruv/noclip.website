@@ -117,6 +117,7 @@ class DataFetcherRequest {
   }
 
   private resolveArrayBuffer(buffer: ArrayBufferLike) {
+    if (isTrkPath(this.url)) buffer = read(buffer);
     const slice = new ArrayBufferSlice(buffer) as NamedArrayBufferSlice;
     slice.name = this.url;
     this.resolve(slice);
@@ -268,7 +269,9 @@ class DataFetcherMount {
     if (options.rangeStart !== undefined && options.rangeSize !== undefined)
       blob = blob.slice(Number(options.rangeStart), Number(options.rangeSize));
 
-    const arrayBuffer = await blob.arrayBuffer();
+    let arrayBuffer = await blob.arrayBuffer();
+    if (isTrkPath(path)) arrayBuffer = read(arrayBuffer);
+
     const arrayBufferSlice = new ArrayBufferSlice(
       arrayBuffer,
     ) as NamedArrayBufferSlice;
@@ -450,3 +453,14 @@ export class DataFetcher {
     return await this.fetchURL(url, options);
   }
 }
+
+function isTrkPath(path: string): boolean {
+  return path.toLowerCase().endsWith(".trk");
+}
+
+const read = (buffer: ArrayBufferLike) => {
+  const src = new Uint8Array(buffer);
+  const dst = new Uint8Array(src.length);
+  for (let i = 0; i < src.length; i++) dst[i] = src[i] ^ 0x32;
+  return dst.buffer;
+};
