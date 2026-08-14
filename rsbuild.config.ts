@@ -40,6 +40,10 @@ export default defineConfig({
     // so that the bundler can resolve them. In the meantime, they're expected to be
     // at the root.
     copy: [
+      {
+        from: "./data",
+        to: "data",
+      },
       { from: "src/**/*.wasm", to: "[name][ext]" },
       {
         from: "node_modules/librw/lib/librw.wasm",

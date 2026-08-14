@@ -9,7 +9,7 @@ export interface NamedArrayBufferSlice extends ArrayBufferSlice {
 
 function getDataStorageBaseURL(isDevelopment: boolean): string {
   // if (isDevelopment)
-  return `/data`;
+  return `./noclip.website/data`;
   // return import.meta.env.PUBLIC_STORAGE_URL;
 }
 
