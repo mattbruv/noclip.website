@@ -14,10 +14,6 @@ try {
 }
 
 export default defineConfig({
-  output: {
-    assetPrefix: "/noclip.website/",
-  },
-
   source: {
     entry: {
       index: "./src/main.ts",
@@ -36,6 +32,7 @@ export default defineConfig({
     template: "./src/index.html",
   },
   output: {
+    assetPrefix: "/noclip.website/",
     target: "web",
     // Mark Node.js built-in modules as external.
     externals: ["fs", "path", "url"],
