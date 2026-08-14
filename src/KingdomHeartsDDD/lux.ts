@@ -16,6 +16,7 @@ import { computeViewMatrix, computeViewMatrixSkybox } from "../Camera";
 import { fillMatrix4x3, fillMatrix4x4, fillVec4 } from "../gfx/helpers/UniformBufferHelpers";
 import { makeBackbufferDescSimple, opaqueBlackFullClearRenderPassDescriptor } from "../gfx/helpers/RenderGraphHelpers";
 import { GfxrAttachmentSlot } from "../gfx/render/GfxRenderGraph";
+import { AABB } from "../Geometry";
 
 // Shared code between DDD and BBS, herein prefixed with "Lux"
 // Credit to OOT3D for the basis of the skeletal animation code
@@ -85,6 +86,7 @@ export interface LuxModel {
 
 export interface LuxModelInstance {
     shiftMatrix: mat4;
+    bbox: AABB;
     setId: number;
 }
 
@@ -280,7 +282,6 @@ export class LuxShapeRenderer implements Destroyable {
     protected vertexBufferDescriptors: GfxVertexBufferDescriptor[] = [];
     private sortKey: number;
     private drawCount: number;
-    private ubSize: number;
     private txaFactor: number = 0;
     private txaKeyframes: TXAKeyframe[] = [];
     private txaFrameCount: number = 0;
@@ -334,10 +335,8 @@ export class LuxShapeRenderer implements Destroyable {
         }
         if (this.doBlendTXA) {
             this.bindingLayouts = BINDING_LAYOUTS_TXA;
-            this.ubSize = 4;
         } else {
             this.bindingLayouts = BINDING_LAYOUTS;
-            this.ubSize = 3;
         }
         this.hasTXA = txa !== undefined;
 
@@ -354,7 +353,7 @@ export class LuxShapeRenderer implements Destroyable {
         renderInst.setGfxProgram(this.gfxProgram!);
         renderInst.setBindingLayouts(this.bindingLayouts);
         renderInst.setVertexInput(this.gfxInputLayout!, this.vertexBufferDescriptors, this.indexBufferDescriptor);
-        let offset = renderInst.allocateUniformBuffer(DreamDropShader.ub_ShapeParams, this.ubSize);
+        let offset = renderInst.allocateUniformBuffer(DreamDropShader.ub_ShapeParams, 4);
         const d = renderInst.mapUniformBufferF32(DreamDropShader.ub_ShapeParams);
         // u_Scroll (2)
         d[offset++] = this.material ? this.material.scrollX : 0.0;
@@ -444,7 +443,7 @@ export class LuxShapeRenderer implements Destroyable {
 export class LuxModelRenderer implements Destroyable, Layer {
     public visible: boolean = true;
     public instances: LuxModelInstance[] = [];
-    protected bboxPoints: Float32Array;
+    public bbox: AABB;
     protected shapes: LuxShapeRenderer[];
     protected hasTXA: boolean;
     protected isBillboard: boolean;
@@ -492,11 +491,11 @@ export class LuxModelRenderer implements Destroyable, Layer {
             this.preComputeBoneMatrices();
         }
 
+        let min = { x: Infinity, y: Infinity, z: Infinity };
+        let max = { x: -Infinity, y: -Infinity, z: -Infinity };
         // manually calculate the bbox for objects
         // some of the bboxes provided by the game are either too big or stuck at world origin
         if (calcBbox) {
-            let min = { x: Infinity, y: Infinity, z: Infinity };
-            let max = { x: -Infinity, y: -Infinity, z: -Infinity };
             for (let i = 0; i < allVertices.length; i += 3) {
                 min.x = Math.min(min.x, allVertices[i]);
                 min.y = Math.min(min.y, allVertices[i + 1]);
@@ -511,20 +510,17 @@ export class LuxModelRenderer implements Destroyable, Layer {
             max.x *= model.scale;
             max.y *= model.scale;
             max.z *= model.scale;
-            // convert from pseudo aabb to box points like the game has them in
-            this.bboxPoints = new Float32Array([
-                min.x, min.y, min.z, 0,
-                max.x, min.y, min.z, 0,
-                min.x, max.y, min.z, 0,
-                max.x, max.y, min.z, 0,
-                min.x, min.y, max.z, 0,
-                max.x, min.y, max.z, 0,
-                min.x, max.y, max.z, 0,
-                max.x, max.y, max.z, 0
-            ]);
         } else {
-            this.bboxPoints = new Float32Array(model.bbox);
+            for (let i = 0; i < 32; i += 4) {
+                min.x = Math.min(min.x, model.bbox[i]);
+                min.y = Math.min(min.y, model.bbox[i + 1]);
+                min.z = Math.min(min.z, model.bbox[i + 2]);
+                max.x = Math.max(max.x, model.bbox[i]);
+                max.y = Math.max(max.y, model.bbox[i + 1]);
+                max.z = Math.max(max.z, model.bbox[i + 2]);
+            }
         }
+        this.bbox = new AABB(min.x, min.y, min.z, max.x, max.y, max.z);
     }
 
     public prepareToRender(device: GfxDevice, renderHelper: GfxRenderHelper, viewerInput: ViewerRenderInput, selectedSets: number[]) {
@@ -538,8 +534,7 @@ export class LuxModelRenderer implements Destroyable, Layer {
             }
 
             if (!this.isSkybox) {
-                mat4.mul(SCRATCH_MVP, viewerInput.camera.clipFromWorldMatrix, instance.shiftMatrix);
-                if (!this.inView(this.bboxPoints, SCRATCH_MVP)) {
+                if (!viewerInput.camera.frustum.contains(instance.bbox)) {
                     continue;
                 }
             }
@@ -593,33 +588,6 @@ export class LuxModelRenderer implements Destroyable, Layer {
         for (const shape of this.shapes) {
             shape.destroy(device);
         }
-    }
-
-    private inView(bbox: Float32Array, m: ReadonlyMat4) {
-        // cheaper frustum culling than with aabb, and data has bbox in points anyway
-        let aol = true, aor = true;
-        let aob = true, aot = true;
-        let aon = true, aof = true;
-        for (let i = 0; i < 32; i += 4) {
-            const x = bbox[i], y = bbox[i + 1], z = bbox[i + 2];
-            const xw = x * m[0] + y * m[4] + z * m[8] + m[12];
-            const yw = x * m[1] + y * m[5] + z * m[9] + m[13];
-            const zw = x * m[2] + y * m[6] + z * m[10] + m[14];
-            const ww = x * m[3] + y * m[7] + z * m[11] + m[15];
-            if (xw >= -ww && xw <= ww && yw >= -ww && yw <= ww && zw >= 0 && zw <= ww) {
-                return true;
-            }
-            if (xw > -ww) aol = false;
-            if (xw < ww) aor = false;
-            if (yw > -ww) aob = false;
-            if (yw < ww) aot = false;
-            if (zw > 0) aon = false;
-            if (zw < ww) aof = false;
-        }
-        if (aol || aor || aob || aot || aon || aof) {
-            return false;
-        }
-        return true;
     }
 
     protected preComputeBoneMatrices() {
@@ -715,7 +683,7 @@ export class LuxRoomRenderer implements Destroyable {
         template.setBindingLayouts(BINDING_LAYOUTS);
         template.setUniformBuffer(renderHelper.uniformBuffer);
 
-        let offset = template.allocateUniformBuffer(DreamDropShader.ub_SceneParams, 19);
+        let offset = template.allocateUniformBuffer(DreamDropShader.ub_SceneParams, 20);
         const uniformBuffer = template.mapUniformBufferF32(DreamDropShader.ub_SceneParams);
         // u_Projection (16)
         offset += fillMatrix4x4(uniformBuffer, offset, viewerInput.camera.projectionMatrix);
@@ -726,7 +694,7 @@ export class LuxRoomRenderer implements Destroyable {
         // u_ShowFog (1)
         uniformBuffer[offset++] = this.showFog ? 1.0 : 0.0;
 
-        offset = template.allocateUniformBuffer(DreamDropShader.ub_EnvParams, 6);
+        offset = template.allocateUniformBuffer(DreamDropShader.ub_EnvParams, 8);
         const uniformBuffer2 = template.mapUniformBufferF32(DreamDropShader.ub_EnvParams);
         // u_FogColor (4)
         offset += fillVec4(uniformBuffer2, offset, this.pvd.fogColor[0], this.pvd.fogColor[1], this.pvd.fogColor[2], this.pvd.fogColor[3]);

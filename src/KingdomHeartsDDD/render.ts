@@ -7,6 +7,7 @@ import { DreamDropShader } from "./shader";
 import { computeLuxShiftMatrix, LuxMaterialInstance, LuxModel, LuxModelInfo, LuxModelRenderer, LuxOLOInstance, LuxPMP, LuxPVD, LuxRoomObjects, LuxRoomRenderer, LuxShape, LuxShapeAttribute, LuxShapeRenderer, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
 import { DREAMDROP_SKYBOX_CENTER } from "./config/data";
 import { vec3 } from "gl-matrix";
+import { AABB } from "../Geometry";
 
 export class DreamDropRoomRenderer extends LuxRoomRenderer {
     constructor(cache: GfxRenderCache, pmp: DreamDropPMP, textures: LuxTexture[], objects: LuxRoomObjects, txas: LuxTXA[], pvd: LuxPVD, config: DreamDropRoomConfig | undefined) {
@@ -41,13 +42,17 @@ export class DreamDropRoomRenderer extends LuxRoomRenderer {
         }
         this.parts[i] = new ModelRenderer(cache, model.name, model, materials, modelTXAs);
         const pos = DREAMDROP_SKYBOX_CENTER.includes(model.name) ? vec3.fromValues(0, 0, 0) : info.position;
-        this.parts[i].instances = [{ shiftMatrix: computeLuxShiftMatrix(info.scale, info.rotation, pos), setId: -1 }];
+        const shiftMatrix = computeLuxShiftMatrix(info.scale, info.rotation, pos);
+        const bbox = this.parts[i].bbox.clone();
+        bbox.transform(bbox, shiftMatrix);
+        this.parts[i].instances = [{ shiftMatrix, setId: -1, bbox }];
     }
 
     protected override setRoomObject(cache: GfxRenderCache, model: LuxModel, setId: number, instance: LuxOLOInstance, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation): void {
         const index = this.objects.findIndex(r => r.name === instance.name);
-        const modelInstance = { shiftMatrix: computeLuxShiftMatrix([1, 1, 1], instance.rotation, instance.position), setId };
+        const modelInstance = { shiftMatrix: computeLuxShiftMatrix([1, 1, 1], instance.rotation, instance.position), setId, bbox: new AABB() };
         if (index > -1) {
+            modelInstance.bbox.transform(this.objects[index].bbox, modelInstance.shiftMatrix);
             this.objects[index].instances.push(modelInstance);
         } else {
             const pmo = model as DreamDropPMO;
@@ -73,6 +78,7 @@ export class DreamDropRoomRenderer extends LuxRoomRenderer {
                 // hide player spawn locations by default to sync with ui panel
                 renderer.visible = false;
             }
+            modelInstance.bbox.transform(renderer.bbox, modelInstance.shiftMatrix);
             renderer.instances = [modelInstance];
             this.objects.push(renderer);
         }

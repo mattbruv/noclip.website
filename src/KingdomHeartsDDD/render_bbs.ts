@@ -4,6 +4,7 @@ import { GfxRenderCache } from "../gfx/render/GfxRenderCache";
 import { computeLuxShiftMatrix, LuxMaterialInstance, LuxModel, LuxModelInfo, LuxModelRenderer, LuxOLOInstance, LuxPMP, LuxRoomRenderer, LuxShape, LuxShapeRenderer, LuxSkeletalAnimation, LuxTexture, LuxTextureAnimation, LuxTXA } from "./lux";
 import { BBSModel, BBSPMP, BBSShape } from "./bin_bbs";
 import { BBSShader } from "./shader";
+import { AABB } from "../Geometry";
 
 export class BBSRoomRenderer extends LuxRoomRenderer {
     protected override setRoomPart(cache: GfxRenderCache, pmp: LuxPMP, info: LuxModelInfo, i: number, textures: LuxTexture[], gfxSampler: GfxSampler): void {
@@ -18,14 +19,18 @@ export class BBSRoomRenderer extends LuxRoomRenderer {
             }
         }
         this.parts[i] = new ModelRenderer(cache, model.name, model, materials, [], undefined);
-        this.parts[i].instances = [{ shiftMatrix: computeLuxShiftMatrix(info.scale, info.rotation, info.position), setId: -1 }];
+        const shiftMatrix = computeLuxShiftMatrix(info.scale, info.rotation, info.position);
+        const bbox = this.parts[i].bbox.clone();
+        bbox.transform(bbox, shiftMatrix);
+        this.parts[i].instances = [{ shiftMatrix, setId: -1, bbox }];
     }
 
     protected override setRoomObject(cache: GfxRenderCache, model: LuxModel, setId: number, instance: LuxOLOInstance, textures: LuxTexture[], gfxSampler: GfxSampler, txas: LuxTXA[], animation?: LuxSkeletalAnimation): void {
-        const i = this.objects.findIndex(r => r.name === instance.name);
-        const modelInstance = { shiftMatrix: computeLuxShiftMatrix([1, 1, 1], instance.rotation, instance.position), setId };
-        if (i > -1) {
-            this.objects[i].instances.push(modelInstance);
+        const index = this.objects.findIndex(r => r.name === instance.name);
+        const modelInstance = { shiftMatrix: computeLuxShiftMatrix([1, 1, 1], instance.rotation, instance.position), setId, bbox: new AABB() };
+        if (index > -1) {
+            modelInstance.bbox.transform(this.objects[index].bbox, modelInstance.shiftMatrix);
+            this.objects[index].instances.push(modelInstance);
         } else {
             const bbsModel = model as BBSModel;
             const materials: LuxMaterialInstance[] = Array(bbsModel.tims.length);
@@ -41,6 +46,7 @@ export class BBSRoomRenderer extends LuxRoomRenderer {
                 // hide player spawn locations by default to sync with ui panel
                 renderer.visible = false;
             }
+            modelInstance.bbox.transform(renderer.bbox, modelInstance.shiftMatrix);
             renderer.instances = [modelInstance];
             this.objects.push(renderer);
         }
