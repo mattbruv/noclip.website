@@ -1,4 +1,14 @@
-export function decompress(src: Uint8Array, outSize: number): Uint8Array {
+import ArrayBufferSlice from "../../../ArrayBufferSlice";
+
+function toSlice(bytes: number[]): ArrayBufferSlice {
+  return new ArrayBufferSlice(new Uint8Array(bytes).buffer);
+}
+
+export function decompress(
+  srcBuffer: ArrayBufferSlice,
+  outSize: number,
+): ArrayBufferSlice {
+  const src = srcBuffer.createTypedArray(Uint8Array);
   let i = 0;
   let dst: number[] = [];
   const n = src.length;
@@ -6,9 +16,9 @@ export function decompress(src: Uint8Array, outSize: number): Uint8Array {
   while (true) {
     if (outSize > 0 && dst.length >= outSize) {
       if (dst.length > outSize) dst.length = outSize;
-      return new Uint8Array(dst);
+      return toSlice(dst);
     }
-    if (i >= n) return new Uint8Array(dst);
+    if (i >= n) return toSlice(dst);
     if (i + 1 >= n) {
       for (let k = i; k < n; k++) dst.push(src[k]);
       i = n;

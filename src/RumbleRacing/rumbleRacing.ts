@@ -10,6 +10,7 @@ import { getTextures } from "./asset/txf/TXF";
 import { TrackLightData } from "./asset/gmd";
 import { vec2, vec3 } from "gl-matrix";
 import { Color, White } from "../Color";
+import ArrayBufferSlice from "../ArrayBufferSlice";
 
 export interface ExcludeInfo {
   textureIds?: Set<number>;
@@ -167,7 +168,7 @@ function buildObfNode(node: ObfNode): ObfJsonNode {
 }
 
 export function processTrackFile(
-  rawData: Uint8Array,
+  rawData: ArrayBufferSlice,
   isGlobalFile: boolean,
 ): RumbleRacingTrackFile {
   const out: RumbleRacingTrackFile = {

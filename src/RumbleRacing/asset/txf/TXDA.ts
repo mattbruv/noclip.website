@@ -1,7 +1,9 @@
+import ArrayBufferSlice from "../../../ArrayBufferSlice";
+
 export interface TXDA {
-  rawData: Uint8Array;
+  rawData: ArrayBufferSlice;
 }
 
-export function parseTXDA(buf: Uint8Array): TXDA {
-  return { rawData: buf.slice(8) };
+export function parseTXDA(buf: ArrayBufferSlice): TXDA {
+  return { rawData: buf.subarray(8) };
 }

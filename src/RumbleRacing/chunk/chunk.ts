@@ -1,3 +1,5 @@
+import ArrayBufferSlice from "../../ArrayBufferSlice";
+import { readChunkData } from "../helpers/chunkData";
 import { readFourCC } from "../helpers/fourCC";
 import { Shoc, readSHOCChunk } from "./shoc/shoc";
 
@@ -5,14 +7,14 @@ export interface Ctrl {
   kind: "CTRL";
   index: number;
   startAddress: number;
-  data: Uint8Array;
+  data: ArrayBufferSlice;
 }
 
 export interface Fill {
   kind: "FILL";
   index: number;
   startAddress: number;
-  data: Uint8Array;
+  data: ArrayBufferSlice;
 }
 
 export interface Generic {
@@ -20,27 +22,24 @@ export interface Generic {
   fourCC: string;
   index: number;
   startAddress: number;
-  data: Uint8Array;
+  data: ArrayBufferSlice;
 }
 
 export type TopLevelChunk = Ctrl | Fill | Generic | Shoc;
 
 export function readCTRLChunk(
-  data: Uint8Array,
+  data: ArrayBufferSlice,
   view: DataView,
   cursor: { pos: number },
   startPos: number,
   index: number,
 ): Ctrl {
-  const chunkSize = view.getUint32(cursor.pos, true);
-  cursor.pos += 4;
-  const chunkData = data.slice(cursor.pos, cursor.pos + (chunkSize - 8));
-  cursor.pos += chunkSize - 8;
+  const chunkData = readChunkData(data, view, cursor);
   return { kind: "CTRL", index, startAddress: startPos, data: chunkData };
 }
 
 export function readFILLChunk(
-  data: Uint8Array,
+  data: ArrayBufferSlice,
   view: DataView,
   cursor: { pos: number },
   startPos: number,
@@ -52,28 +51,22 @@ export function readFILLChunk(
       kind: "FILL",
       index,
       startAddress: startPos,
-      data: new Uint8Array(0),
+      data: data.subarray(pos, 0),
     };
   }
-  const chunkSize = view.getUint32(cursor.pos, true);
-  cursor.pos += 4;
-  const chunkData = data.slice(cursor.pos, cursor.pos + (chunkSize - 8));
-  cursor.pos += chunkSize - 8;
+  const chunkData = readChunkData(data, view, cursor);
   return { kind: "FILL", index, startAddress: startPos, data: chunkData };
 }
 
 export function readGenericChunk(
-  data: Uint8Array,
+  data: ArrayBufferSlice,
   view: DataView,
   cursor: { pos: number },
   fourCC: string,
   startPos: number,
   index: number,
 ): Generic {
-  const chunkSize = view.getUint32(cursor.pos, true);
-  cursor.pos += 4;
-  const chunkData = data.slice(cursor.pos, cursor.pos + (chunkSize - 8));
-  cursor.pos += chunkSize - 8;
+  const chunkData = readChunkData(data, view, cursor);
   return {
     kind: "GENERIC",
     fourCC,
@@ -84,15 +77,15 @@ export function readGenericChunk(
 }
 
 export function readTopLevelChunk(
-  data: Uint8Array,
+  data: ArrayBufferSlice,
   view: DataView,
   cursor: { pos: number },
   chunkIndex: number,
 ): TopLevelChunk | null {
-  if (cursor.pos >= data.length) return null;
+  if (cursor.pos >= data.byteLength) return null;
 
   const startPos = cursor.pos;
-  if (startPos + 4 > data.length) return null;
+  if (startPos + 4 > data.byteLength) return null;
 
   const fourCC = readFourCC(data, startPos);
   cursor.pos += 4;

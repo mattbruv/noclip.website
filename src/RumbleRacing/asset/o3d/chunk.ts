@@ -29,8 +29,7 @@ export interface ObfChunk {
 
 export function parseELHE(chunk: AssetChunk): ELHE_Header {
   const base = 0x8;
-  const p = chunk.payload;
-  const view = new DataView(p.buffer, p.byteOffset, p.byteLength);
+  const view = chunk.payload.createDataView();
   return {
     raw: chunk,
     childCount: view.getUint16(base, true),
@@ -54,8 +53,8 @@ export function eldaParseVif(elda: ELDA_Data): VifCommand[] {
   return parseVif(elda.raw.payload);
 }
 
-export function parseObfChunks(data: Uint8Array): ObfChunk[] {
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+export function parseObfChunks(data: ArrayBufferSlice): ObfChunk[] {
+  const view = data.createDataView();
   const chunks: ObfChunk[] = [];
   let offset = 0;
 
@@ -64,27 +63,22 @@ export function parseObfChunks(data: Uint8Array): ObfChunk[] {
   let currentElda: ELDA_Data | null = null;
   let chunkIndex = 0;
 
-  while (offset < data.length) {
-    if (offset + 8 > data.length) {
+  while (offset < data.byteLength) {
+    if (offset + 8 > data.byteLength) {
       throw new Error(`incomplete chunk header at offset ${offset}`);
     }
 
     // OBF fourcc bytes are not reversed like all of the other ones..
-    const magicBytes = data.slice(offset, offset + 4);
-    const magic = readString(
-      ArrayBufferSlice.fromView(magicBytes),
-      0,
-      4,
-      false,
-    );
+    const magicBytes = data.subarray(offset, 4);
+    const magic = readString(magicBytes, 0, 4, false);
     const size = view.getUint32(offset + 4, true);
     const chunkEnd = offset + size + 8;
-    if (chunkEnd > data.length) {
+    if (chunkEnd > data.byteLength) {
       throw new Error(
         `chunk size ${size} exceeds remaining data at offset ${offset}`,
       );
     }
-    const payload = data.slice(offset, chunkEnd);
+    const payload = data.subarray(offset, size + 8);
 
     const assetChunk: AssetChunk = {
       offset,

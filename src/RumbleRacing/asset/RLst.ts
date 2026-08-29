@@ -14,8 +14,8 @@ export interface RLst {
   entries: ResourceEntry[];
 }
 
-export function parseRLst(data: Uint8Array, fileName: string): RLst {
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+export function parseRLst(data: ArrayBufferSlice, fileName: string): RLst {
+  const view = data.createDataView();
   let pos = 0;
 
   const count = view.getUint32(pos, true);
@@ -30,8 +30,7 @@ export function parseRLst(data: Uint8Array, fileName: string): RLst {
     const index = view.getUint32(pos, true);
     pos += 4;
 
-    const nameBytes = data.slice(pos, pos + 24);
-    const name = readString(ArrayBufferSlice.fromView(nameBytes), 0, 24, true);
+    const name = readString(data, pos, 24, true);
     pos += 24;
 
     entries.push({ typeTag, resourceIndex: index, resourceName: name });
