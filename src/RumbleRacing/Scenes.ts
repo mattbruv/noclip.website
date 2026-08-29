@@ -809,10 +809,7 @@ class RumbleRacingSceneDesc implements SceneDesc {
       decoder.decode(actorBlob.arrayBuffer),
     ) as unknown as ActorTransforms;
 
-    const trackData: RumbleRacingTrackFile = processTrackFile(
-      new Uint8Array(trackBlob.arrayBuffer),
-      false,
-    );
+    const trackData: RumbleRacingTrackFile = processTrackFile(trackBlob, false);
 
     const shared =
       await sceneContext.dataShare.ensureObject<RumbleRacingShared>(
@@ -823,7 +820,7 @@ class RumbleRacingSceneDesc implements SceneDesc {
           );
 
           const globalData: RumbleRacingTrackFile = processTrackFile(
-            new Uint8Array(data.arrayBuffer),
+            data,
             true,
           );
           return {

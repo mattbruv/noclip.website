@@ -1,3 +1,4 @@
+import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { TopLevelChunk, readTopLevelChunk } from "../chunk/chunk";
 import { SHDR } from "../chunk/shoc/shdr";
 import { decompress } from "../chunk/shoc/decompress";
@@ -17,13 +18,13 @@ export interface TrackFile {
   topLevelChunks: TopLevelChunk[];
 }
 
-export function readTrackChunks(data: Uint8Array): TopLevelChunk[] {
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+export function readTrackChunks(data: ArrayBufferSlice): TopLevelChunk[] {
+  const view = data.createDataView();
   const cursor = { pos: 0 };
   const chunks: TopLevelChunk[] = [];
   let chunkIndex = 0;
 
-  while (cursor.pos < data.length) {
+  while (cursor.pos < data.byteLength) {
     try {
       const chunk = readTopLevelChunk(data, view, cursor, chunkIndex);
       if (chunk === null) break;
@@ -31,7 +32,7 @@ export function readTrackChunks(data: Uint8Array): TopLevelChunk[] {
       chunks.push(chunk);
       chunkIndex++;
     } catch (e) {
-      if (cursor.pos >= data.length) break;
+      if (cursor.pos >= data.byteLength) break;
       console.warn("Unexpected error reading chunk:", e);
       break;
     }
@@ -41,12 +42,12 @@ export function readTrackChunks(data: Uint8Array): TopLevelChunk[] {
 }
 
 export function parseTrackFile(
-  data: Uint8Array,
+  data: ArrayBufferSlice,
   fileName: string = "unknown",
 ): TrackFile {
   return {
     fileName,
-    fileSize: data.length,
+    fileSize: data.byteLength,
     topLevelChunks: readTrackChunks(data),
   };
 }
@@ -80,35 +81,35 @@ function getHeaderForResource(
   return null;
 }
 
-function getDataForHeader(track: TrackFile, header: SHDR): Uint8Array {
-  let assetData: number[] = [];
+function getDataForHeader(track: TrackFile, header: SHDR): ArrayBufferSlice {
+  const assetData = new Uint8Array(header.totalDataSize);
+  let written = 0;
   let shocCount = 1;
 
-  while (true) {
+  while (written < header.totalDataSize) {
     const topLevel = track.topLevelChunks[header.shocIndex + shocCount];
     if (!topLevel) break;
+    shocCount++;
 
-    if (topLevel.kind !== "SHOC") {
-      shocCount++;
-      continue;
-    }
+    if (topLevel.kind !== "SHOC") continue;
 
     const meta = topLevel.metadata;
 
+    let chunkData: ArrayBufferSlice;
     if (meta.kind === "SDAT") {
-      for (const b of meta.data) assetData.push(b);
+      chunkData = meta.data;
     } else if (meta.kind === "Rdat") {
-      const decompressed = decompress(meta.data, meta.outBufferSize);
-      for (const b of decompressed) assetData.push(b);
+      chunkData = decompress(meta.data, meta.outBufferSize);
     } else {
       throw new Error("Unhandled SHOC type: " + meta.kind);
     }
 
-    shocCount++;
-    if (assetData.length >= header.totalDataSize) break;
+    const size = Math.min(chunkData.byteLength, header.totalDataSize - written);
+    assetData.set(chunkData.createTypedArray(Uint8Array, 0, size), written);
+    written += size;
   }
 
-  return new Uint8Array(assetData.slice(0, header.totalDataSize));
+  return new ArrayBufferSlice(assetData.buffer, 0, written);
 }
 
 export function getResourceList(track: TrackFile): RLst {

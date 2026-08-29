@@ -1,7 +1,9 @@
+import ArrayBufferSlice from "../../../ArrayBufferSlice";
+
 export interface CLDA {
-  rawData: Uint8Array;
+  rawData: ArrayBufferSlice;
 }
 
-export function parseCLDA(buf: Uint8Array): CLDA {
-  return { rawData: buf.slice(8) };
+export function parseCLDA(buf: ArrayBufferSlice): CLDA {
+  return { rawData: buf.subarray(8) };
 }

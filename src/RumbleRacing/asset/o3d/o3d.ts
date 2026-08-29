@@ -1,3 +1,4 @@
+import ArrayBufferSlice from "../../../ArrayBufferSlice";
 import { vec3 } from "gl-matrix";
 import { SHDR } from "../../chunk/shoc/shdr";
 import { readFourCC } from "../../helpers/fourCC";
@@ -17,7 +18,7 @@ export interface GmdBounds {
 }
 
 export interface Gmd {
-  rawData: Uint8Array;
+  rawData: ArrayBufferSlice;
   bounds: GmdBounds | null;
 }
 
@@ -29,10 +30,10 @@ function readVec3(view: DataView, offset: number): vec3 {
   );
 }
 
-function parseGmdBounds(data: Uint8Array): GmdBounds | null {
+function parseGmdBounds(data: ArrayBufferSlice): GmdBounds | null {
   if (data.byteLength < GMD_SPHERE_RADIUS + 4) return null;
 
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const view = data.createDataView();
 
   return {
     boxCenter: readVec3(view, GMD_BOX_CENTER),
@@ -44,7 +45,7 @@ function parseGmdBounds(data: Uint8Array): GmdBounds | null {
 
 export interface O3D {
   kind: "O3D";
-  rawData: Uint8Array;
+  rawData: ArrayBufferSlice;
   resourceName: string;
   shocHeader: SHDR;
   isAnimated: boolean;
@@ -54,7 +55,7 @@ export interface O3D {
 
 export function parseO3D(
   isAnimated: boolean,
-  buf: Uint8Array,
+  buf: ArrayBufferSlice,
   header: SHDR,
   resName: string,
 ): O3D {

@@ -1,11 +1,13 @@
+import ArrayBufferSlice from "../../../ArrayBufferSlice";
+
 export interface Rdat {
   kind: "Rdat";
   outBufferSize: number;
-  data: Uint8Array;
+  data: ArrayBufferSlice;
 }
 
-export function parseRdat(data: Uint8Array): Rdat {
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+export function parseRdat(data: ArrayBufferSlice): Rdat {
+  const view = data.createDataView();
   const size = view.getUint32(0, true);
-  return { kind: "Rdat", outBufferSize: size, data: data.slice(4) };
+  return { kind: "Rdat", outBufferSize: size, data: data.subarray(4) };
 }

@@ -1,3 +1,4 @@
+import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { parseChunks } from "./chunk";
 
 export interface Actor {
@@ -7,30 +8,19 @@ export interface Actor {
   y: number;
   z: number;
   o3dResourceIndex: number;
-  raw: Uint8Array;
+  raw: ArrayBufferSlice;
 }
 
-export function parseActor(buf: Uint8Array): Actor {
+export function parseActor(buf: ArrayBufferSlice): Actor {
   const chunks = parseChunks(buf);
 
-  const header = chunks[0].payload.slice(8);
-  const headerView = new DataView(
-    header.buffer,
-    header.byteOffset,
-    header.byteLength,
-  );
-
-  const actorType = header[4];
+  const headerView = chunks[0].payload.createDataView(8);
+  const actorType = headerView.getUint8(4);
   const x = headerView.getFloat32(8, true);
   const y = headerView.getFloat32(12, true);
   const z = headerView.getFloat32(16, true);
 
-  const resource = chunks[1];
-  const resourceView = new DataView(
-    resource.payload.buffer,
-    resource.payload.byteOffset,
-    resource.payload.byteLength,
-  );
+  const resourceView = chunks[1].payload.createDataView();
   const o3dResourceIndex = resourceView.getUint32(0x10, true);
 
   return {

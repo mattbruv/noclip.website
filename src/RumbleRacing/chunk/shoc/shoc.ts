@@ -1,3 +1,5 @@
+import ArrayBufferSlice from "../../../ArrayBufferSlice";
+import { readChunkData } from "../../helpers/chunkData";
 import { readFourCC } from "../../helpers/fourCC";
 import { SHDR, parseSHDR } from "./shdr";
 import { SDAT, parseSDAT } from "./sdat";
@@ -10,13 +12,16 @@ export interface Shoc {
   index: number;
   startAddress: number;
   metadata: ShocMetadata;
-  data: Uint8Array;
+  data: ArrayBufferSlice;
 }
 
-function parseSubChunk(data: Uint8Array, shocIndex: number): ShocMetadata {
+function parseSubChunk(
+  data: ArrayBufferSlice,
+  shocIndex: number,
+): ShocMetadata {
   const fourCC = readFourCC(data, 8);
 
-  const inner = data.slice(12);
+  const inner = data.subarray(12);
   switch (fourCC) {
     case "SHDR":
       return parseSHDR(inner, shocIndex);
@@ -30,16 +35,13 @@ function parseSubChunk(data: Uint8Array, shocIndex: number): ShocMetadata {
 }
 
 export function readSHOCChunk(
-  data: Uint8Array,
+  data: ArrayBufferSlice,
   view: DataView,
   cursor: { pos: number },
   startPos: number,
   index: number,
 ): Shoc {
-  const chunkSize = view.getUint32(cursor.pos, true);
-  cursor.pos += 4;
-  const chunkData = data.slice(cursor.pos, cursor.pos + (chunkSize - 8));
-  cursor.pos += chunkSize - 8;
+  const chunkData = readChunkData(data, view, cursor);
 
   return {
     kind: "SHOC",

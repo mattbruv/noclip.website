@@ -1,4 +1,5 @@
 import { vec3 } from "gl-matrix";
+import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { Color, colorNewFromRGBA } from "../../Color";
 import { readFourCC } from "../helpers/fourCC";
 import { SHDR } from "../chunk/shoc/shdr";
@@ -11,7 +12,11 @@ export interface Gmd {
   lights: TrackLightData | null;
 }
 
-export function parseGmd(buf: Uint8Array, header: SHDR, resName: string): Gmd {
+export function parseGmd(
+  buf: ArrayBufferSlice,
+  header: SHDR,
+  resName: string,
+): Gmd {
   const gmd: Gmd = {
     kind: "Gmd",
     lights: null,
@@ -60,8 +65,8 @@ export interface TrackLightData {
   points: PointLight[];
 }
 
-function parseTrackLights(data: Uint8Array): TrackLightData {
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+function parseTrackLights(data: ArrayBufferSlice): TrackLightData {
+  const view = data.createDataView();
 
   const glowCount = view.getUint32(LIGH_GLOW_COUNT, true);
   const pointCount = view.getUint32(LIGH_POINT_COUNT, true);

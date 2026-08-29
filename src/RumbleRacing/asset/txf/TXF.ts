@@ -10,7 +10,7 @@ import { Texture, extractTexturesFromZTHE } from "./texture";
 
 export interface TXF {
   kind: "TXF";
-  rawData: Uint8Array;
+  rawData: ArrayBufferSlice;
   resourceName: string;
   shocHeader: SHDR;
   header: HEAD;
@@ -20,35 +20,31 @@ export interface TXF {
   clutData: CLDA;
 }
 
-function splitTaggedChunks(buf: Uint8Array): Uint8Array[] {
-  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
-  const chunks: Uint8Array[] = [];
+function splitTaggedChunks(buf: ArrayBufferSlice): ArrayBufferSlice[] {
+  const view = buf.createDataView();
+  const chunks: ArrayBufferSlice[] = [];
   let offset = 0;
 
-  while (offset + 8 <= buf.length) {
-    const tag = buf.slice(offset, offset + 4);
+  while (offset + 8 <= buf.byteLength) {
     const size = view.getUint32(offset + 4, true);
-    offset += 8;
 
-    if (offset + size > buf.length) {
-      throw new Error(`invalid size ${size} at offset ${offset}`);
+    if (offset + 8 + size > buf.byteLength) {
+      throw new Error(`invalid size ${size} at offset ${offset + 8}`);
     }
 
-    const data = buf.slice(offset, offset + size);
-    offset += size;
-
-    const chunk = new Uint8Array(8 + data.length);
-    chunk.set(tag, 0);
-    chunk.set(buf.slice(offset - size - 4, offset - size), 4);
-    chunk.set(data, 8);
-    chunks.push(chunk);
+    chunks.push(buf.subarray(offset, 8 + size));
+    offset += 8 + size;
   }
 
   return chunks;
 }
 
-export function parseTXF(buf: Uint8Array, hdr: SHDR, resName: string): TXF {
-  const chunks = splitTaggedChunks(buf.slice(8));
+export function parseTXF(
+  buf: ArrayBufferSlice,
+  hdr: SHDR,
+  resName: string,
+): TXF {
+  const chunks = splitTaggedChunks(buf.subarray(8));
 
   let header: HEAD | null = null;
   const textureHeaders: ZTHE[] = [];
@@ -57,7 +53,7 @@ export function parseTXF(buf: Uint8Array, hdr: SHDR, resName: string): TXF {
   let clutData: CLDA | null = null;
 
   for (const chunk of chunks) {
-    const tag = readString(ArrayBufferSlice.fromView(chunk), 0, 4, false);
+    const tag = readString(chunk, 0, 4, false);
 
     switch (tag) {
       case "HEAD":

@@ -1,8 +1,9 @@
+import ArrayBufferSlice from "../../ArrayBufferSlice";
 import { SHDR } from "../chunk/shoc/shdr";
 
 export interface Asset {
   getType(): string;
-  rawData(): Uint8Array;
+  rawData(): ArrayBufferSlice;
 }
 
 export interface GenericAsset extends Asset {
@@ -12,7 +13,7 @@ export interface GenericAsset extends Asset {
 }
 
 export function parseGenericAsset(
-  buf: Uint8Array,
+  buf: ArrayBufferSlice,
   tag: string,
   header: SHDR,
 ): GenericAsset {

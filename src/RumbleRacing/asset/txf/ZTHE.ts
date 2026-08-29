@@ -1,3 +1,4 @@
+import ArrayBufferSlice from "../../../ArrayBufferSlice";
 import { GSPixelStorageFormat } from "../../../Common/PS2/GS";
 
 export interface ZTHETextureMetaHeader {
@@ -14,56 +15,44 @@ export interface ZTHETexture {
   blockWidthPixels: number;
   clutHeaderIndex: number;
   textureId: number;
-  rawData: Uint8Array;
+  rawData: ArrayBufferSlice;
 }
 
 export interface ZTHE {
   textureCount: number;
   textures: ZTHETexture[];
-  rawData: Uint8Array;
+  rawData: ArrayBufferSlice;
 }
 
-export function parseZTHE(buf: Uint8Array): ZTHE {
-  const raw = buf;
-  const rawView = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
-  const texCount = rawView.getUint32(8, true);
-  buf = buf.slice(12);
+export function parseZTHE(buf: ArrayBufferSlice): ZTHE {
+  const texCount = buf.createDataView().getUint32(8, true);
+  const body = buf.subarray(12);
 
   const textures: ZTHETexture[] = [];
 
-  for (let i = 0; i + 0x48 <= buf.length; i += 0x48) {
-    const data = buf.slice(i, i + 0x48);
-    const dataView = new DataView(
-      data.buffer,
-      data.byteOffset,
-      data.byteLength,
-    );
-    const imageCount = data[0x31];
+  for (let i = 0; i + 0x48 <= body.byteLength; i += 0x48) {
+    const data = body.subarray(i, 0x48);
+    const dataView = data.createDataView();
+    const imageCount = dataView.getUint8(0x31);
 
     const metaHeaders: ZTHETextureMetaHeader[] = [];
     for (let j = 0; j < imageCount; j++) {
       const offset = j * 0xc;
-      const hData = data.slice(offset, offset + 0xc);
-      const hView = new DataView(
-        hData.buffer,
-        hData.byteOffset,
-        hData.byteLength,
-      );
       metaHeaders.push({
-        txdaAddressOffset: hView.getUint32(0, true),
-        blockHeightPixels: hView.getUint16(0x6, true),
-        selfPlusMemAllocRes: hView.getUint16(0x8, true),
-        ramDestWidth: hView.getUint16(0xa, true),
+        txdaAddressOffset: dataView.getUint32(offset, true),
+        blockHeightPixels: dataView.getUint16(offset + 0x6, true),
+        selfPlusMemAllocRes: dataView.getUint16(offset + 0x8, true),
+        ramDestWidth: dataView.getUint16(offset + 0xa, true),
       });
     }
 
     textures.push({
-      texelStorageFormat: data[0x30],
+      texelStorageFormat: dataView.getUint8(0x30),
       imageCount,
       blockWidthPixels: dataView.getUint16(0x3e, true),
       images: metaHeaders,
       textureId: dataView.getUint16(0x34, true),
-      clutHeaderIndex: data[0x44],
+      clutHeaderIndex: dataView.getUint8(0x44),
       rawData: data,
     });
   }
@@ -72,5 +61,5 @@ export function parseZTHE(buf: Uint8Array): ZTHE {
     throw new Error("TexCount != length of textures!");
   }
 
-  return { textureCount: texCount, textures, rawData: raw };
+  return { textureCount: texCount, textures, rawData: buf };
 }

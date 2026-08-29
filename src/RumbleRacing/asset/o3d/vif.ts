@@ -1,3 +1,4 @@
+import ArrayBufferSlice from "../../../ArrayBufferSlice";
 import { VifUnpackFormat, VifCmd } from "../../../Common/PS2/VIF";
 
 export interface V4_32Entry {
@@ -44,7 +45,7 @@ export interface VifCommand {
   cycle?: number;
   mask?: number;
   strow?: [number, number, number, number];
-  direct?: Uint8Array[];
+  direct?: ArrayBufferSlice[];
   unpack?: UnpackData;
 }
 
@@ -66,22 +67,22 @@ function getUnpackInfo(command: number, immediate: number): UnpackInfo {
   };
 }
 
-export function parseVif(payload: Uint8Array): VifCommand[] {
-  if (payload.length < 8)
+export function parseVif(payload: ArrayBufferSlice): VifCommand[] {
+  if (payload.byteLength < 8)
     throw new Error("ELDA payload too small for VIF data");
-  const data = payload.slice(8);
-  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const data = payload.subarray(8);
+  const view = data.createDataView();
+  const bytes = data.createTypedArray(Uint8Array);
   const commands: VifCommand[] = [];
   let idx = 0;
-  const dataLen = data.length;
+  const dataLen = data.byteLength;
 
   while (idx < dataLen) {
     if (idx + 4 > dataLen) break;
 
-    const b = data.slice(idx, idx + 4);
-    const command = b[3];
-    const num = b[2];
-    const immediate = (b[1] << 8) | b[0];
+    const command = bytes[idx + 3];
+    const num = bytes[idx + 2];
+    const immediate = (bytes[idx + 1] << 8) | bytes[idx + 0];
     idx += 4;
 
     const cmd: VifCommand = {
@@ -135,9 +136,9 @@ export function parseVif(payload: Uint8Array): VifCommand[] {
         const neededBytes = quadCount * 16;
         if (idx + neededBytes > dataLen)
           throw new Error("unexpected EOF reading DIRECT");
-        const quads: Uint8Array[] = [];
+        const quads: ArrayBufferSlice[] = [];
         for (let i = 0; i < quadCount; i++) {
-          quads.push(data.slice(idx, idx + 16));
+          quads.push(data.subarray(idx, 16));
           idx += 16;
         }
         cmd.direct = quads;
@@ -211,10 +212,10 @@ export function parseVif(payload: Uint8Array): VifCommand[] {
               if (idx + needed > dataLen)
                 throw new Error("unexpected EOF reading V4_8");
               for (let i = 0; i < count; i++) {
-                const b0 = data[idx],
-                  b1 = data[idx + 1],
-                  b2 = data[idx + 2],
-                  b3 = data[idx + 3];
+                const b0 = bytes[idx],
+                  b1 = bytes[idx + 1],
+                  b2 = bytes[idx + 2],
+                  b3 = bytes[idx + 3];
                 idx += 4;
                 unpack.v4_8.push({
                   v1: b0,

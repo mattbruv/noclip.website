@@ -1,3 +1,4 @@
+import ArrayBufferSlice from "../../../ArrayBufferSlice";
 import {
   ObfChunk,
   parseObfChunks,
@@ -30,7 +31,7 @@ export interface ObfNode {
 
 export interface Obf {
   kind: "Obf";
-  rawBytes: Uint8Array;
+  rawBytes: ArrayBufferSlice;
   rawObfChunks: ObfChunk[];
   rootNode: ObfNode;
 }
@@ -47,18 +48,8 @@ function buildTextureMetadata(
 
   if (elhe.maybeNumTextures <= 0) return meta;
 
-  const eltlData = eltl.raw.payload.slice(8);
-  const eldaData = elda.raw.payload.slice(8);
-  const eltlView = new DataView(
-    eltlData.buffer,
-    eltlData.byteOffset,
-    eltlData.byteLength,
-  );
-  const eldaView = new DataView(
-    eldaData.buffer,
-    eldaData.byteOffset,
-    eldaData.byteLength,
-  );
+  const eltlView = eltl.raw.payload.createDataView(8);
+  const eldaView = elda.raw.payload.createDataView(8);
 
   for (let i = 0; i < elhe.maybeNumTextures; i++) {
     let offset = eltlView.getUint32(i * 4, true);
@@ -82,7 +73,7 @@ function buildTree(
   node.metadata.y = raw.elhe.y;
   node.metadata.z = raw.elhe.z;
   node.metadata.w = raw.elhe.w;
-  node.metadata.dataLen = raw.elda.raw.payload.length;
+  node.metadata.dataLen = raw.elda.raw.payload.byteLength;
   node.metadata.headerOffset = raw.elhe.raw.offset;
   node.metadata.textureMetadata = buildTextureMetadata(
     raw.elhe,
@@ -130,8 +121,8 @@ function buildTree(
   return nodeCount;
 }
 
-export function parseObf(buf: Uint8Array): Obf {
-  const obfBytes = buf.slice(0x18);
+export function parseObf(buf: ArrayBufferSlice): Obf {
+  const obfBytes = buf.subarray(0x18);
   const chunks = parseObfChunks(obfBytes);
 
   const rootNode: ObfNode = {

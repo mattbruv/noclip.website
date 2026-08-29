@@ -1,4 +1,3 @@
-import ArrayBufferSlice from "../../../ArrayBufferSlice";
 import {
   GSCLUTPixelStorageFormat,
   GSPixelStorageFormat,
@@ -75,7 +74,7 @@ export function extractTexturesFromZTHE(
 
   const clutStart = clutHeader.cldaStartOffset;
   const clutSize = clutWidth * clutHeight * clutPixelBytes;
-  const clutData = txf.clutData.rawData.slice(clutStart, clutStart + clutSize);
+  const clutData = txf.clutData.rawData.subarray(clutStart, clutSize);
 
   const cbp = clutHeader.vramDest;
 
@@ -89,7 +88,7 @@ export function extractTexturesFromZTHE(
     0,
     clutWidth,
     clutHeight,
-    ArrayBufferSlice.fromView(clutData),
+    clutData,
   );
 
   for (let k = 0; k < zthe.images.length; k++) {
@@ -103,7 +102,7 @@ export function extractTexturesFromZTHE(
       zthe.texelStorageFormat === GSPixelStorageFormat.PSMT4 ? size / 2 : size;
 
     const start = txImage.txdaAddressOffset;
-    const data = txf.textureData.rawData.slice(start, start + texelBytes);
+    const data = txf.textureData.rawData.subarray(start, texelBytes);
     const tbp0 = txImage.selfPlusMemAllocRes;
     const tbw = txImage.ramDestWidth;
 
@@ -116,7 +115,7 @@ export function extractTexturesFromZTHE(
       0,
       width,
       height,
-      ArrayBufferSlice.fromView(data),
+      data,
     );
 
     const pix = new Uint8Array(size * 4);
