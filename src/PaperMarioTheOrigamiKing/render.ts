@@ -639,7 +639,7 @@ export class OrigamiMaterialInstance {
         template.setSamplerBindingsFromTextureMappings(this.textureMapping);
         template.setMegaStateFlags(this.megaStateFlags);
 
-        let offs = template.allocateUniformBuffer(OrigamiProgram.ub_MaterialParams, 17);
+        let offs = template.allocateUniformBuffer(OrigamiProgram.ub_MaterialParams, 20);
         const d = template.mapUniformBufferF32(OrigamiProgram.ub_MaterialParams);
         offs += this.texCoordSRT0.fillMatrix4x2(d, offs);
         offs += this.texCoordSRT1.fillMatrix4x2(d, offs);

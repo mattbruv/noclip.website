@@ -1572,7 +1572,7 @@ const sceneDescs = [
     // new FFXLevelSceneDesc(128, "Kilika - Residential Area", [0x2f]),
     // new FFXLevelSceneDesc(129, "Kilika - House", [0x125]),
     // new FFXLevelSceneDesc(130, "Kilika - House", [0x126]),
-    new FFXLevelSceneDesc(131, "Kilika Forest", []), // missing name?
+    new FFXLevelSceneDesc(131, "Kilika Forest", [0x12]),
     new FFXLevelSceneDesc(132, "Kilika - Pilgrimage Road", [0x41]),
     "Kilika Temple",
     // new FFXLevelSceneDesc(133, "Kilika Temple", [0xa6]),
